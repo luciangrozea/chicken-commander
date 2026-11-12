@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ChickenCommander.Core/ChickenCommander.Core.csproj" />
+    <Project Path="src/ChickenCommander/ChickenCommander.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ChickenCommander.Core.Tests/ChickenCommander.Core.Tests.csproj" />
+  </Folder>
+</Solution>
