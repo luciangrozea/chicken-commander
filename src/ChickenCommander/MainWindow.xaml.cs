@@ -9,6 +9,7 @@ using ChickenCommander.Core.FileSystem;
 using ChickenCommander.Core.Operations;
 using ChickenCommander.Core.Settings;
 using ChickenCommander.Services;
+using ChickenCommander.Viewer;
 using ChickenCommander.ViewModels;
 using ChickenCommander.Views;
 
@@ -50,7 +51,71 @@ public partial class MainWindow : Window, IDialogService
             };
         }
 
+        // Quick View follows the active panel's cursor, with a short delay so fast scrolling stays smooth.
+        quickViewTimer.Tick += async (_, _) =>
+        {
+            quickViewTimer.Stop();
+            await UpdateQuickViewContentAsync();
+        };
+        LeftQuickView.InfoChanged += () => LeftQuickInfo.Text = LeftQuickView.Info;
+        RightQuickView.InfoChanged += () => RightQuickInfo.Text = RightQuickView.Info;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(MainViewModel.IsQuickView) or nameof(MainViewModel.ActivePanel)) UpdateQuickViewLayout();
+        };
+        foreach (var p in new[] { vm.Left, vm.Right })
+        {
+            p.PropertyChanged += (s, e) =>
+            {
+                if (vm.IsQuickView && s == vm.ActivePanel && e.PropertyName == nameof(FilePanelViewModel.CurrentItem))
+                {
+                    quickViewTimer.Stop();
+                    quickViewTimer.Start();
+                }
+            };
+        }
+
         Loaded += (_, _) => ActivePanelView.FocusList();
+    }
+
+    private readonly System.Windows.Threading.DispatcherTimer quickViewTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
+    private SearchWindow? searchWindow;
+
+    // ---- Quick View ------------------------------------------------------------------------
+
+    private void UpdateQuickViewLayout()
+    {
+        var on = vm.IsQuickView;
+        var leftIsPreview = on && vm.ActivePanel == vm.Right;
+        var rightIsPreview = on && vm.ActivePanel == vm.Left;
+        LeftPanel.Visibility = leftIsPreview ? Visibility.Collapsed : Visibility.Visible;
+        RightPanel.Visibility = rightIsPreview ? Visibility.Collapsed : Visibility.Visible;
+        LeftQuickHost.Visibility = leftIsPreview ? Visibility.Visible : Visibility.Collapsed;
+        RightQuickHost.Visibility = rightIsPreview ? Visibility.Visible : Visibility.Collapsed;
+        if (!leftIsPreview) LeftQuickView.Close();
+        if (!rightIsPreview) RightQuickView.Close();
+        if (on) _ = UpdateQuickViewContentAsync();
+        ActivePanelView.FocusList();
+    }
+
+    private async Task UpdateQuickViewContentAsync()
+    {
+        if (!vm.IsQuickView) return;
+        var view = vm.ActivePanel == vm.Left ? RightQuickView : LeftQuickView;
+        var item = vm.ActivePanel.CurrentItem;
+        if (item is null)
+        {
+            view.ShowMessage(string.Empty);
+        }
+        else if (item.Entry.IsDirectory)
+        {
+            var path = item.Entry.FullPath;
+            view.ShowMessage(await Task.Run(() => ViewerControl.DescribeFolder(path)));
+        }
+        else
+        {
+            await view.LoadAsync(item.Entry.FullPath);
+        }
     }
 
     private FilePanel ActivePanelView => vm.ActivePanel == vm.Left ? LeftPanel : RightPanel;
@@ -153,6 +218,10 @@ public partial class MainWindow : Window, IDialogService
             case (Key.M, ModifierKeys.Control): vm.MultiRenameCommand.Execute(null); return true;
             case (Key.I, ModifierKeys.Control): vm.ChangeAttributesCommand.Execute(null); return true;
             case (Key.O, CtrlShift): vm.ShowOperationsCommand.Execute(null); return true;
+            case (Key.F7, ModifierKeys.Alt): vm.SearchCommand.Execute(null); return true;
+            case (Key.Q, ModifierKeys.Control): vm.ToggleQuickViewCommand.Execute(null); return true;
+            case (Key.C, CtrlShift): vm.CompareFilesCommand.Execute(null); return true;
+            case (Key.S, CtrlShift): vm.SyncDirectoriesCommand.Execute(null); return true;
             case (Key.R, ModifierKeys.Control): vm.RefreshCommand.Execute(null); return true;
             case (Key.U, ModifierKeys.Control): vm.SwapPanelsCommand.Execute(null); return true;
             case (Key.E, ModifierKeys.Control): vm.TargetEqualsSourceCommand.Execute(null); return true;
@@ -388,6 +457,57 @@ public partial class MainWindow : Window, IDialogService
         menu.Closed += (_, _) => ActivePanelView.FocusList();
         menu.IsOpen = true;
         if (menu.Items.Count > 0 && menu.Items[0] is MenuItem first) first.Focus();
+    }
+
+    public void ShowLister(IReadOnlyList<string> files, int index)
+    {
+        if (files.Count == 0) return;
+        new ListerWindow(files, index) { Owner = this }.Show();
+    }
+
+    public void ShowSearch(string startFolder)
+    {
+        if (searchWindow is { IsLoaded: true })
+        {
+            searchWindow.Activate();
+            return;
+        }
+        searchWindow = new SearchWindow(startFolder,
+            goToFile: path =>
+            {
+                Activate();
+                vm.GoToFile(path);
+            },
+            viewFiles: ShowLister) { Owner = this };
+        searchWindow.Closed += (_, _) => searchWindow = null;
+        searchWindow.Show();
+    }
+
+    public void ShowCompare(string left, string right)
+    {
+        string? binary;
+        try
+        {
+            binary = CompareWindow.BinarySummary(left, right);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowError("Compare by content", ex.Message);
+            return;
+        }
+        if (binary is not null)
+        {
+            MessageBox.Show(this, binary, "Compare by content", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        new CompareWindow(left, right) { Owner = this }.Show();
+    }
+
+    public bool ShowSync(string left, string right)
+    {
+        var window = new SyncWindow(left, right) { Owner = this };
+        window.ShowDialog();
+        return window.Changed;
     }
 
     /// <summary>Conflict prompts belong to the progress window when it is open, otherwise to the main window.</summary>

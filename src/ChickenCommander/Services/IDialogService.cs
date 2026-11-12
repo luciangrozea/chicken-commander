@@ -38,4 +38,15 @@ public interface IDialogService
 
     /// <summary>Shows a popup menu over the active panel.</summary>
     void ShowMenu(IReadOnlyList<MenuEntry> entries);
+
+    /// <summary>Opens the built-in viewer on <paramref name="files"/>, starting at <paramref name="index"/>.</summary>
+    void ShowLister(IReadOnlyList<string> files, int index);
+
+    /// <summary>Opens (or brings back) the non-modal file search window.</summary>
+    void ShowSearch(string startFolder);
+
+    void ShowCompare(string left, string right);
+
+    /// <summary>Opens the directory synchronization tool; returns true if files were copied.</summary>
+    bool ShowSync(string left, string right);
 }

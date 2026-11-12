@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src="src/ChickenCommander/Assets/chicken.png" width="128" alt="Chicken Commander logo" />
 </p>
 
@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/luciangrozea/chicken-commander/releases/latest"><b>â¬‡ Download the latest release</b></a>
+  <a href="https://github.com/luciangrozea/chicken-commander/releases/latest"><b>⬇ Download the latest release</b></a>
 </p>
 
 <p align="center">
@@ -39,9 +39,16 @@
 - **Own copy / move engine** running in the background: a queue of jobs with per-file and total progress, speed, time left, pause / resume and cancel
 - Conflict handling: overwrite, skip, overwrite older, rename (keep both), each also "for all"
 - Same-volume moves are instant renames; timestamps and attributes are preserved; half-written files are never left behind
-- **Multi-Rename tool** with live preview: masks (`[N]`, `[N1-3]`, `[E]`, `[C]` counter, `[YMD]`, `[P]`â€¦), search & replace with regex, case conversion, collision detection, undo
+- **Multi-Rename tool** with live preview: masks (`[N]`, `[N1-3]`, `[E]`, `[C]` counter, `[YMD]`, `[P]`…), search & replace with regex, case conversion, collision detection, undo
 - **Attributes dialog**: read-only / archive / hidden / system (three-state for mixed selections), modification date, recursive
 - Delete to Recycle Bin or permanently, new folder, rename in place
+
+**Tools**
+- **Built-in viewer** (`F3`): text with encoding detection (UTF-8/16/32, BOM, Latin-1), hex, and images; opens multi-GB files instantly by reading only the visible lines; find, word wrap, next/previous file
+- **Quick View panel** (`Ctrl+Q`): the other panel previews whatever is under the cursor
+- **Find files** (`Alt+F7`): name masks, containing text (with line preview), size and date filters, subfolders, hidden files; results stream in while searching
+- **Compare by content**: side-by-side line diff (Myers algorithm) with ignore case / whitespace and jump between differences; binary files report the first differing byte
+- **Synchronize directories**: compare two trees by date, size or content, review and change each action (→ / ← / skip), then copy
 
 **Marking & command line**
 - Insert / Space, mark by mask (`*.txt;*.md | *.bak`), invert, select all
@@ -61,21 +68,25 @@
 | `Num +` / `Num -` | Mark / unmark by mask | `Shift+Del` | Delete permanently |
 | `Num *` | Invert marks | `Ctrl+R` | Refresh |
 | `Ctrl+A` / `Ctrl+Shift+A` | Mark / unmark all | `Ctrl+H` | Show hidden files |
-| `Ctrl+Enter` | Name â†’ command line | `Ctrl+U` | Swap panels |
+| `Ctrl+Enter` | Name → command line | `Ctrl+U` | Swap panels |
 | `Esc` | Clear command line | `Ctrl+E` | Target = source |
 | `Ctrl+T` / `Ctrl+W` | New / close tab | `Ctrl+M` | Multi-Rename tool |
 | `Ctrl+Tab` | Next tab (`Shift`: previous) | `Ctrl+I` | Change attributes |
 | `Ctrl+Up` | Open folder in new tab | `Ctrl+D` | Directory hotlist |
 | `Alt+Left` / `Alt+Right` | Back / forward | `Alt+Down` | Folder history |
-| `Ctrl+Shift+O` | File operations window | | |
+| `Ctrl+Shift+O` | File operations window | `Ctrl+Q` | Quick View panel |
+| `Alt+F7` | Find files | `Ctrl+Shift+C` | Compare by content |
+| `Ctrl+Shift+S` | Synchronize directories | | |
+
+In the viewer: `1` / `2` / `3` text / hex / image, `W` wrap, `Ctrl+F` find, `F3` find next, `N` / `P` next / previous file, `Esc` close.
 
 ## Roadmap
 
-- [x] **v0.1 â€“ Core**: dual panels, navigation, marking, shell file operations, command line
-- [x] **v0.2 â€“ Operations**: own copy/move engine with background queue and progress, multi-rename tool, folder tabs, directory history and hotlist, file attributes dialog, saved settings
-- [ ] **v0.3 â€“ Tools**: built-in viewer (text / hex / image), file search, compare by content, synchronize directories, quick view panel
-- [ ] **v0.4 â€“ Archives & network**: browse ZIP / 7z / TAR like folders, pack / unpack, FTP / SFTP client, checksums
-- [ ] **v1.0 â€“ Polish**: settings dialog, themes (incl. dark), customizable shortcuts and button bar, installer
+- [x] **v0.1 – Core**: dual panels, navigation, marking, shell file operations, command line
+- [x] **v0.2 – Operations**: own copy/move engine with background queue and progress, multi-rename tool, folder tabs, directory history and hotlist, file attributes dialog, saved settings
+- [x] **v0.3 – Tools**: built-in viewer (text / hex / image), file search, compare by content, synchronize directories, quick view panel
+- [ ] **v0.4 – Archives & network**: browse ZIP / 7z / TAR like folders, pack / unpack, FTP / SFTP client, checksums
+- [ ] **v1.0 – Polish**: settings dialog, themes (incl. dark), customizable shortcuts and button bar, installer
 
 ## Building
 
@@ -101,9 +112,12 @@ src/
     FileSystem/            Directory listing, sorting, masks, paths, navigation history
     Operations/            Copy/move engine, multi-rename, attributes
     Settings/              JSON settings store
+    Tools/                 File search, text diff, directory sync
+    Viewer/                Encoding detection, line-indexed file reader, hex formatting
   ChickenCommander/        WPF app (MVVM with CommunityToolkit.Mvvm)
     ViewModels/            Panel and main window state, commands
-    Views/                 File panel control, dialogs
+    Viewer/                Viewer control (text / hex / image) and Lister window
+    Views/                 File panel control, dialogs, search / compare / sync windows
     Services/              Operation queue, Windows shell interop (icons, delete to Recycle Bin)
 tests/
   ChickenCommander.Core.Tests/

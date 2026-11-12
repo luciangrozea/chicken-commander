@@ -1,0 +1,71 @@
+<Window x:Class="ChickenCommander.Views.SyncWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Synchronize directories" Width="1100" Height="700" MinWidth="760" MinHeight="420"
+        WindowStartupLocation="CenterOwner" Icon="/Assets/chicken.ico"
+        Background="{StaticResource ChromeBrush}">
+    <DockPanel Margin="10">
+        <Grid DockPanel.Dock="Top">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="LeftBox" Padding="3" />
+            <TextBlock Grid.Column="1" Text="⇄" FontSize="16" Margin="10,0" VerticalAlignment="Center" />
+            <TextBox x:Name="RightBox" Grid.Column="2" Padding="3" />
+        </Grid>
+
+        <WrapPanel DockPanel.Dock="Top" Margin="0,8,0,8">
+            <TextBlock Text="Files:" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <TextBox x:Name="MaskBox" Text="*.*" Width="120" Padding="2" Margin="0,0,14,0" />
+            <CheckBox x:Name="SubfoldersBox" Content="Sub_folders" IsChecked="True" VerticalAlignment="Center" Margin="0,0,14,0" />
+            <CheckBox x:Name="ContentBox" Content="By _content" VerticalAlignment="Center" Margin="0,0,14,0" ToolTip="Also compare bytes when size and date match (slower)" />
+            <CheckBox x:Name="IgnoreDateBox" Content="Ignore _date" VerticalAlignment="Center" Margin="0,0,14,0" />
+            <Button x:Name="CompareButton" Content="Co_mpare" Width="100" IsDefault="True" Click="Compare_Click" />
+            <TextBlock Text="Show:" VerticalAlignment="Center" Margin="24,0,6,0" />
+            <ToggleButton x:Name="ShowLeft" Content="→ copy right" IsChecked="True" Padding="6,1" Margin="0,0,2,0" Click="Filter_Click" />
+            <ToggleButton x:Name="ShowRight" Content="← copy left" IsChecked="True" Padding="6,1" Margin="0,0,2,0" Click="Filter_Click" />
+            <ToggleButton x:Name="ShowEqual" Content="= equal" IsChecked="False" Padding="6,1" Margin="0,0,2,0" Click="Filter_Click" />
+            <ToggleButton x:Name="ShowDifferent" Content="≠ unsure" IsChecked="True" Padding="6,1" Click="Filter_Click" />
+        </WrapPanel>
+
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="SyncButton" Content="_Synchronize" Width="110" Click="Sync_Click" IsEnabled="False" Margin="0,0,8,0" FontWeight="Bold" />
+                <Button Content="Close" Width="80" IsCancel="True" Click="Close_Click" />
+            </StackPanel>
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="#3A4256" TextTrimming="CharacterEllipsis"
+                       Text="Click a row's arrow (or press Space) to change what happens: → copy right, ← copy left, or nothing." />
+        </DockPanel>
+
+        <DataGrid x:Name="Rows" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
+                  GridLinesVisibility="None" RowHeight="20" BorderBrush="#C9CFDB" Background="White"
+                  SelectionMode="Extended" PreviewKeyDown="Rows_PreviewKeyDown" EnableRowVirtualization="True">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Left" Binding="{Binding LeftName}" Width="*" />
+                <DataGridTextColumn Header="Size" Binding="{Binding LeftSize}" Width="90">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock"><Setter Property="HorizontalAlignment" Value="Right" /></Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Date" Binding="{Binding LeftDate}" Width="115" />
+                <DataGridTemplateColumn Header="Action" Width="70">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="{Binding ActionSymbol}" Click="Action_Click" Focusable="False" FontWeight="Bold"
+                                    Background="Transparent" BorderThickness="0" Foreground="{Binding ActionBrush}" ToolTip="Change action" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Right" Binding="{Binding RightName}" Width="*" />
+                <DataGridTextColumn Header="Size" Binding="{Binding RightSize}" Width="90">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock"><Setter Property="HorizontalAlignment" Value="Right" /></Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Date" Binding="{Binding RightDate}" Width="115" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

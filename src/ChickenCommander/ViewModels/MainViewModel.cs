@@ -16,6 +16,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private FilePanelViewModel activePanel = null!;
     [ObservableProperty] private string commandLine = string.Empty;
 
+    /// <summary>When on, the inactive panel shows a preview of the item under the active panel's cursor.</summary>
+    [ObservableProperty] private bool isQuickView;
+
     public MainViewModel(IDialogService dialogs, AppSettings settings, OperationQueue operations)
     {
         this.dialogs = dialogs;
@@ -83,11 +86,75 @@ public partial class MainViewModel : ObservableObject
 
     // ---- F-key bar -------------------------------------------------------------------------
 
+    /// <summary>F3: built-in viewer over the marked files (or all files of the folder), starting at the cursor.</summary>
     [RelayCommand]
-    private void View() => LaunchCurrent(edit: false);
+    private void View()
+    {
+        var current = ActivePanel.CurrentItem;
+        if (current is null || current.Entry.IsDirectory) return;
+        var marked = ActivePanel.MarkedItems.Where(i => !i.Entry.IsDirectory).ToList();
+        var files = (marked.Count > 1 ? marked : ActivePanel.Items.Where(i => !i.Entry.IsDirectory))
+            .Select(i => i.Entry.FullPath).ToList();
+        var index = files.FindIndex(f => string.Equals(f, current.Entry.FullPath, StringComparison.OrdinalIgnoreCase));
+        dialogs.ShowLister(files, Math.Max(0, index));
+    }
 
     [RelayCommand]
-    private void Edit() => LaunchCurrent(edit: true);
+    private void Edit()
+    {
+        var item = ActivePanel.CurrentItem;
+        if (item is null || item.Entry.IsDirectory) return;
+        ShellOpen("notepad.exe", Quote(item.Entry.FullPath));
+    }
+
+    [RelayCommand]
+    private void ToggleQuickView() => IsQuickView = !IsQuickView;
+
+    [RelayCommand]
+    private void Search() => dialogs.ShowSearch(ActivePanel.CurrentPath);
+
+    /// <summary>Compares two marked files in the active panel, or the files under both cursors.</summary>
+    [RelayCommand]
+    private void CompareFiles()
+    {
+        var marked = ActivePanel.MarkedItems.Where(i => !i.Entry.IsDirectory).ToList();
+        string? left, right;
+        if (marked.Count == 2)
+        {
+            (left, right) = (marked[0].Entry.FullPath, marked[1].Entry.FullPath);
+        }
+        else
+        {
+            left = ActivePanel.CurrentItem is { Entry.IsDirectory: false } a ? a.Entry.FullPath : null;
+            right = InactivePanel.CurrentItem is { Entry.IsDirectory: false } b ? b.Entry.FullPath : null;
+            if (ActivePanel == Right) (left, right) = (right, left); // keep the left panel's file on the left
+        }
+        if (left is null || right is null)
+        {
+            dialogs.ShowError("Compare by content", "Mark two files in one panel, or put the cursor on a file in each panel.");
+            return;
+        }
+        dialogs.ShowCompare(left, right);
+    }
+
+    [RelayCommand]
+    private void SyncDirectories()
+    {
+        if (dialogs.ShowSync(Left.CurrentPath, Right.CurrentPath))
+        {
+            Left.Refresh();
+            Right.Refresh();
+        }
+        ActivePanel.RequestFocus();
+    }
+
+    /// <summary>Puts the active panel on a file (used by search results).</summary>
+    public void GoToFile(string path)
+    {
+        var dir = Path.GetDirectoryName(path);
+        if (dir is null) return;
+        ActivePanel.Navigate(dir, Path.GetFileName(path));
+    }
 
     [RelayCommand]
     private void Copy() => Transfer(TransferKind.Copy);
@@ -353,15 +420,6 @@ public partial class MainViewModel : ObservableObject
     private void About() => dialogs.ShowAbout();
 
     // ---- Helpers ---------------------------------------------------------------------------
-
-    private void LaunchCurrent(bool edit)
-    {
-        var item = ActivePanel.CurrentItem;
-        if (item is null || item.Entry.IsDirectory) return;
-        // The built-in viewer (Lister) arrives in v0.3; until then use the system's programs.
-        if (edit) ShellOpen("notepad.exe", Quote(item.Entry.FullPath));
-        else ShellOpen(item.Entry.FullPath, null);
-    }
 
     private void ShellOpen(string file, string? args)
     {
