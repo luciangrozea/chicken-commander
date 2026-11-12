@@ -436,7 +436,36 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
         }
         sb.AppendLine();
         sb.AppendLine("Change shortcuts in Settings (Ctrl+,) → Keyboard.");
-        MessageBox.Show(this, sb.ToString(), "Keyboard shortcuts", MessageBoxButton.OK, MessageBoxImage.Information);
+        ShowTextWindow("Keyboard shortcuts", sb.ToString());
+    }
+
+    /// <summary>
+    /// A long text in a scrollable window that always fits on the screen
+    /// (a message box grows taller than the screen and hides its OK button).
+    /// </summary>
+    private void ShowTextWindow(string title, string text)
+    {
+        var body = new TextBlock { Text = text, FontFamily = new FontFamily("Consolas"), FontSize = 13, Margin = new Thickness(16, 12, 16, 12) };
+        body.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
+        var close = new Button { Content = "Close", MinWidth = 90, Margin = new Thickness(12), HorizontalAlignment = HorizontalAlignment.Right, IsDefault = true, IsCancel = true };
+        var layout = new DockPanel();
+        DockPanel.SetDock(close, Dock.Bottom);
+        layout.Children.Add(close);
+        layout.Children.Add(new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        var window = new Window
+        {
+            Title = title,
+            Owner = this,
+            Content = layout,
+            Width = 640,
+            Height = Math.Min(760, SystemParameters.WorkArea.Height * 0.85),
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ShowInTaskbar = false,
+        };
+        window.SetResourceReference(BackgroundProperty, "SurfaceBrush");
+        close.Click += (_, _) => window.Close();
+        window.ShowDialog();
+        ActivePanelView.FocusList();
     }
 
     // ---- IDialogService --------------------------------------------------------------------

@@ -151,6 +151,13 @@ public partial class FilePanel : UserControl
             // Do not switch to the tab; its menu opens on button release (TabStrip_PreviewMouseUp).
             e.Handled = true;
         }
+        else if (e.ChangedButton == MouseButton.Left && ViewModel is { } vm)
+        {
+            // The tab items are not focusable (the keyboard stays in the file list), and a ListBoxItem
+            // only selects itself when it can take focus, so the click switches tabs here.
+            vm.ActiveTab = tab;
+            e.Handled = true;
+        }
         // Clicking a tab also activates this panel.
         Dispatcher.BeginInvoke(FocusList, DispatcherPriority.Input);
     }
