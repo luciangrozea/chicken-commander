@@ -6,104 +6,116 @@
         Title="Chicken Commander" Icon="/Assets/chicken.ico"
         Width="1200" Height="760" MinWidth="640" MinHeight="400"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource ChromeBrush}"
+        Background="{DynamicResource ChromeBrush}" Foreground="{DynamicResource TextBrush}"
         PreviewKeyDown="Window_PreviewKeyDown"
         PreviewTextInput="Window_PreviewTextInput"
         Closing="Window_Closing">
+    <!-- Menu items carry a command id in Tag; Command_Click runs it and the shortcut text is filled in from the
+         (customizable) shortcut map, so menu, keyboard and button bar always agree. -->
     <DockPanel>
-        <Menu DockPanel.Dock="Top" Background="{StaticResource ChromeBrush}" Padding="2">
+        <Menu x:Name="MainMenu" DockPanel.Dock="Top" Background="{DynamicResource ChromeBrush}" Padding="2">
             <MenuItem Header="_Files">
-                <MenuItem Header="_View" InputGestureText="F3" Command="{Binding ViewCommand}" />
-                <MenuItem Header="_Edit" InputGestureText="F4" Command="{Binding EditCommand}" />
+                <MenuItem Header="_View" Tag="View" Click="Command_Click" />
+                <MenuItem Header="_Edit" Tag="Edit" Click="Command_Click" />
                 <Separator />
-                <MenuItem Header="_Copy..." InputGestureText="F5" Command="{Binding CopyCommand}" />
-                <MenuItem Header="_Rename/Move..." InputGestureText="F6" Command="{Binding MoveCommand}" />
-                <MenuItem Header="Re_name in place..." InputGestureText="Shift+F6" Command="{Binding RenameCommand}" />
-                <MenuItem Header="New _folder..." InputGestureText="F7" Command="{Binding MakeDirectoryCommand}" />
-                <MenuItem Header="_Delete" InputGestureText="F8 / Del" Command="{Binding DeleteCommand}" />
-                <MenuItem Header="Delete _permanently" InputGestureText="Shift+Del" Command="{Binding DeletePermanentlyCommand}" />
+                <MenuItem Header="_Copy..." Tag="Copy" Click="Command_Click" />
+                <MenuItem Header="_Rename/Move..." Tag="Move" Click="Command_Click" />
+                <MenuItem Header="Re_name in place..." Tag="Rename" Click="Command_Click" />
+                <MenuItem Header="New _folder..." Tag="MakeDirectory" Click="Command_Click" />
+                <MenuItem Header="_Delete" Tag="Delete" Click="Command_Click" />
+                <MenuItem Header="Delete _permanently" Tag="DeletePermanently" Click="Command_Click" />
                 <Separator />
-                <MenuItem Header="_Pack..." InputGestureText="Alt+F5" Command="{Binding PackCommand}" />
-                <MenuItem Header="_Unpack..." InputGestureText="Alt+F9" Command="{Binding UnpackCommand}" />
-                <MenuItem Header="Create chec_ksums..." Command="{Binding CreateChecksumsCommand}" />
-                <MenuItem Header="_Verify checksums" Command="{Binding VerifyChecksumsCommand}" />
+                <MenuItem Header="_Pack..." Tag="Pack" Click="Command_Click" />
+                <MenuItem Header="_Unpack..." Tag="Unpack" Click="Command_Click" />
+                <MenuItem Header="Create chec_ksums..." Tag="CreateChecksums" Click="Command_Click" />
+                <MenuItem Header="_Verify checksums" Tag="VerifyChecksums" Click="Command_Click" />
                 <Separator />
-                <MenuItem Header="Compare by con_tent..." InputGestureText="Ctrl+Shift+C" Command="{Binding CompareFilesCommand}" />
-                <MenuItem Header="_Multi-Rename tool..." InputGestureText="Ctrl+M" Command="{Binding MultiRenameCommand}" />
-                <MenuItem Header="Change _attributes..." InputGestureText="Ctrl+I" Command="{Binding ChangeAttributesCommand}" />
-                <MenuItem Header="File _operations window" InputGestureText="Ctrl+Shift+O" Command="{Binding ShowOperationsCommand}" />
+                <MenuItem Header="Compare by con_tent..." Tag="CompareFiles" Click="Command_Click" />
+                <MenuItem Header="_Multi-Rename tool..." Tag="MultiRename" Click="Command_Click" />
+                <MenuItem Header="Change _attributes..." Tag="ChangeAttributes" Click="Command_Click" />
+                <MenuItem Header="File _operations window" Tag="ShowOperations" Click="Command_Click" />
                 <Separator />
                 <MenuItem Header="E_xit" InputGestureText="Alt+F4" Click="Exit_Click" />
             </MenuItem>
             <MenuItem Header="_Mark">
-                <MenuItem Header="_Select group..." InputGestureText="Num +" Command="{Binding SelectGroupCommand}" />
-                <MenuItem Header="_Unselect group..." InputGestureText="Num -" Command="{Binding UnselectGroupCommand}" />
-                <MenuItem Header="Select _all" InputGestureText="Ctrl+A" Command="{Binding SelectAllCommand}" />
-                <MenuItem Header="Unselect a_ll" InputGestureText="Ctrl+Shift+A" Command="{Binding UnselectAllCommand}" />
-                <MenuItem Header="_Invert selection" InputGestureText="Num *" Command="{Binding InvertSelectionCommand}" />
+                <MenuItem Header="_Select group..." Tag="SelectGroup" Click="Command_Click" />
+                <MenuItem Header="_Unselect group..." Tag="UnselectGroup" Click="Command_Click" />
+                <MenuItem Header="Select _all" Tag="SelectAll" Click="Command_Click" />
+                <MenuItem Header="Unselect a_ll" Tag="UnselectAll" Click="Command_Click" />
+                <MenuItem Header="_Invert selection" Tag="InvertSelection" Click="Command_Click" />
             </MenuItem>
             <MenuItem Header="_Commands">
-                <MenuItem Header="Fin_d files..." InputGestureText="Alt+F7" Command="{Binding SearchCommand}" />
-                <MenuItem Header="S_ynchronize directories..." InputGestureText="Ctrl+Shift+S" Command="{Binding SyncDirectoriesCommand}" />
+                <MenuItem Header="Fin_d files..." Tag="Search" Click="Command_Click" />
+                <MenuItem Header="S_ynchronize directories..." Tag="SyncDirectories" Click="Command_Click" />
                 <Separator />
-                <MenuItem Header="Directory _hotlist" InputGestureText="Ctrl+D" Command="{Binding ShowHotlistCommand}" />
-                <MenuItem Header="Add current folder to hotlist..." Command="{Binding AddToHotlistCommand}" />
-                <MenuItem Header="Folder hi_story" InputGestureText="Alt+Down" Command="{Binding ShowHistoryCommand}" />
-                <MenuItem Header="_Back" InputGestureText="Alt+Left" Command="{Binding GoBackCommand}" />
-                <MenuItem Header="_Forward" InputGestureText="Alt+Right" Command="{Binding GoForwardCommand}" />
+                <MenuItem Header="Directory _hotlist" Tag="ShowHotlist" Click="Command_Click" />
+                <MenuItem Header="Add current folder to hotlist..." Tag="AddToHotlist" Click="Command_Click" />
+                <MenuItem Header="Folder hi_story" Tag="ShowHistory" Click="Command_Click" />
+                <MenuItem Header="_Back" Tag="GoBack" Click="Command_Click" />
+                <MenuItem Header="_Forward" Tag="GoForward" Click="Command_Click" />
                 <Separator />
-                <MenuItem Header="_Swap panels" InputGestureText="Ctrl+U" Command="{Binding SwapPanelsCommand}" />
-                <MenuItem Header="_Target = Source" InputGestureText="Ctrl+E" Command="{Binding TargetEqualsSourceCommand}" />
-                <MenuItem Header="Command _prompt here" Click="OpenCmd_Click" />
-                <MenuItem Header="Open in _Explorer" Click="OpenExplorer_Click" />
+                <MenuItem Header="_Swap panels" Tag="SwapPanels" Click="Command_Click" />
+                <MenuItem Header="_Target = Source" Tag="TargetEqualsSource" Click="Command_Click" />
+                <MenuItem Header="Command _prompt here" Tag="CommandPrompt" Click="Command_Click" />
+                <MenuItem Header="Open in _Explorer" Tag="Explorer" Click="Command_Click" />
             </MenuItem>
             <MenuItem Header="_Net">
-                <MenuItem Header="_Connect to server (FTP / SFTP)..." InputGestureText="Ctrl+N" Command="{Binding ConnectCommand}" />
-                <MenuItem Header="_Disconnect" InputGestureText="Ctrl+Shift+N" Command="{Binding DisconnectCommand}" />
+                <MenuItem Header="_Connect to server (FTP / SFTP)..." Tag="Connect" Click="Command_Click" />
+                <MenuItem Header="_Disconnect" Tag="Disconnect" Click="Command_Click" />
             </MenuItem>
             <MenuItem Header="_Tabs">
-                <MenuItem Header="_New tab" InputGestureText="Ctrl+T" Command="{Binding NewTabCommand}" />
-                <MenuItem Header="Open folder in new _tab" InputGestureText="Ctrl+Up" Command="{Binding OpenInNewTabCommand}" />
-                <MenuItem Header="_Close tab" InputGestureText="Ctrl+W" Command="{Binding CloseTabCommand}" />
-                <MenuItem Header="Ne_xt tab" InputGestureText="Ctrl+Tab" Command="{Binding NextTabCommand}" />
-                <MenuItem Header="_Previous tab" InputGestureText="Ctrl+Shift+Tab" Command="{Binding PreviousTabCommand}" />
+                <MenuItem Header="_New tab" Tag="NewTab" Click="Command_Click" />
+                <MenuItem Header="Open folder in new _tab" Tag="OpenInNewTab" Click="Command_Click" />
+                <MenuItem Header="_Close tab" Tag="CloseTab" Click="Command_Click" />
+                <MenuItem Header="Ne_xt tab" Tag="NextTab" Click="Command_Click" />
+                <MenuItem Header="_Previous tab" Tag="PreviousTab" Click="Command_Click" />
             </MenuItem>
             <MenuItem Header="_Show">
-                <MenuItem Header="_Quick View panel" InputGestureText="Ctrl+Q" IsCheckable="True"
-                          IsChecked="{Binding IsQuickView, Mode=OneWay}" Command="{Binding ToggleQuickViewCommand}" />
-                <MenuItem Header="_Hidden/system files" InputGestureText="Ctrl+H" IsCheckable="True"
-                          IsChecked="{Binding ShowHidden, Mode=OneWay}" Command="{Binding ToggleHiddenCommand}" />
-                <MenuItem Header="_Refresh" InputGestureText="Ctrl+R" Command="{Binding RefreshCommand}" />
+                <MenuItem Header="_Quick View panel" Tag="ToggleQuickView" Click="Command_Click"
+                          IsCheckable="True" IsChecked="{Binding IsQuickView, Mode=OneWay}" />
+                <MenuItem Header="_Hidden/system files" Tag="ToggleHidden" Click="Command_Click"
+                          IsCheckable="True" IsChecked="{Binding ShowHidden, Mode=OneWay}" />
+                <MenuItem Header="_Button bar" Click="ToggleButtonBar_Click" x:Name="ButtonBarMenuItem" IsCheckable="True" />
+                <MenuItem Header="_Refresh" Tag="Refresh" Click="Command_Click" />
+            </MenuItem>
+            <MenuItem Header="C_onfiguration">
+                <MenuItem Header="_Settings..." Tag="Settings" Click="Command_Click" />
             </MenuItem>
             <MenuItem Header="_Help">
-                <MenuItem Header="_Keyboard shortcuts" InputGestureText="F1" Click="Shortcuts_Click" />
+                <MenuItem Header="_Keyboard shortcuts" Tag="Help" Click="Command_Click" />
+                <MenuItem Header="_Project on GitHub" Click="GitHub_Click" />
                 <MenuItem Header="_About Chicken Commander" Command="{Binding AboutCommand}" />
             </MenuItem>
         </Menu>
 
+        <!-- Button bar: built from settings in code-behind -->
+        <Border x:Name="ButtonBarHost" DockPanel.Dock="Top" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="4,2">
+            <WrapPanel x:Name="ButtonBarPanel" />
+        </Border>
+
         <!-- Function key bar -->
         <UniformGrid DockPanel.Dock="Bottom" Rows="1" Margin="2">
             <UniformGrid.Resources>
-                <Style TargetType="Button">
+                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                     <Setter Property="Focusable" Value="False" />
                     <Setter Property="Margin" Value="1" />
                     <Setter Property="Padding" Value="4,3" />
-                    <Setter Property="Background" Value="White" />
-                    <Setter Property="BorderBrush" Value="#C9CFDB" />
+                    <Setter Property="HorizontalAlignment" Value="Stretch" />
+                    <EventSetter Event="Click" Handler="Command_Click" />
                 </Style>
             </UniformGrid.Resources>
-            <Button Content="F3 View" Command="{Binding ViewCommand}" />
-            <Button Content="F4 Edit" Command="{Binding EditCommand}" />
-            <Button Content="F5 Copy" Command="{Binding CopyCommand}" />
-            <Button Content="F6 Move" Command="{Binding MoveCommand}" />
-            <Button Content="F7 NewFolder" Command="{Binding MakeDirectoryCommand}" />
-            <Button Content="F8 Delete" Command="{Binding DeleteCommand}" />
-            <Button Content="Alt+F4 Exit" Click="Exit_Click" />
+            <Button Content="F3 View" Tag="View" />
+            <Button Content="F4 Edit" Tag="Edit" />
+            <Button Content="F5 Copy" Tag="Copy" />
+            <Button Content="F6 Move" Tag="Move" />
+            <Button Content="F7 NewFolder" Tag="MakeDirectory" />
+            <Button Content="F8 Delete" Tag="Delete" />
+            <Button Content="Alt+F4 Exit" Click="Exit_Click" Tag="" />
         </UniformGrid>
 
         <!-- Command line -->
         <DockPanel DockPanel.Dock="Bottom" Margin="4,2">
-            <TextBlock Text="{Binding CommandPrompt}" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="#1B2A55"
+            <TextBlock Text="{Binding CommandPrompt}" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="{DynamicResource AccentTextBrush}"
                        MaxWidth="500" TextTrimming="CharacterEllipsis" />
             <TextBox x:Name="CommandLineBox" Text="{Binding CommandLine, UpdateSourceTrigger=PropertyChanged}"
                      Padding="2" KeyDown="CommandLineBox_KeyDown" />
@@ -121,14 +133,14 @@
 
             <!-- Quick View (Ctrl+Q): replaces the inactive panel -->
             <DockPanel x:Name="LeftQuickHost" Grid.Column="0" Visibility="Collapsed">
-                <TextBlock DockPanel.Dock="Top" Text="Quick View  (Ctrl+Q to close)" Padding="4,3" Background="{StaticResource PanelHeaderInactiveBrush}" FontWeight="SemiBold" />
-                <TextBlock x:Name="LeftQuickInfo" DockPanel.Dock="Bottom" Padding="4,2" Background="{StaticResource ChromeBrush}" TextTrimming="CharacterEllipsis" />
-                <Border BorderBrush="#C9CFDB" BorderThickness="1"><viewer:ViewerControl x:Name="LeftQuickView" /></Border>
+                <TextBlock DockPanel.Dock="Top" Text="Quick View  (Ctrl+Q to close)" Padding="4,3" Background="{DynamicResource PanelHeaderInactiveBrush}" Foreground="{DynamicResource PanelHeaderInactiveTextBrush}" FontWeight="SemiBold" />
+                <TextBlock x:Name="LeftQuickInfo" DockPanel.Dock="Bottom" Padding="4,2" Background="{DynamicResource ChromeBrush}" TextTrimming="CharacterEllipsis" />
+                <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1"><viewer:ViewerControl x:Name="LeftQuickView" /></Border>
             </DockPanel>
             <DockPanel x:Name="RightQuickHost" Grid.Column="2" Visibility="Collapsed">
-                <TextBlock DockPanel.Dock="Top" Text="Quick View  (Ctrl+Q to close)" Padding="4,3" Background="{StaticResource PanelHeaderInactiveBrush}" FontWeight="SemiBold" />
-                <TextBlock x:Name="RightQuickInfo" DockPanel.Dock="Bottom" Padding="4,2" Background="{StaticResource ChromeBrush}" TextTrimming="CharacterEllipsis" />
-                <Border BorderBrush="#C9CFDB" BorderThickness="1"><viewer:ViewerControl x:Name="RightQuickView" /></Border>
+                <TextBlock DockPanel.Dock="Top" Text="Quick View  (Ctrl+Q to close)" Padding="4,3" Background="{DynamicResource PanelHeaderInactiveBrush}" Foreground="{DynamicResource PanelHeaderInactiveTextBrush}" FontWeight="SemiBold" />
+                <TextBlock x:Name="RightQuickInfo" DockPanel.Dock="Bottom" Padding="4,2" Background="{DynamicResource ChromeBrush}" TextTrimming="CharacterEllipsis" />
+                <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1"><viewer:ViewerControl x:Name="RightQuickView" /></Border>
             </DockPanel>
         </Grid>
     </DockPanel>

@@ -213,7 +213,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Delete() => DeleteSelection(toRecycleBin: true);
+    private void Delete() => DeleteSelection(toRecycleBin: settings.DeleteToRecycleBin);
 
     [RelayCommand]
     private void DeletePermanently() => DeleteSelection(toRecycleBin: false);
@@ -604,7 +604,9 @@ public partial class MainViewModel : ObservableObject
         var question = remote
             ? $"Delete {what} from the server?\nThis cannot be undone."
             : toRecycleBin ? $"Delete {what} to the Recycle Bin?" : $"Permanently delete {what}?\nThis cannot be undone.";
-        if (!dialogs.Confirm("Delete", question)) return;
+        // Moving to the Recycle Bin can skip the question (a setting); permanent and server deletes always ask.
+        var mustAsk = settings.ConfirmDelete || remote || !toRecycleBin;
+        if (mustAsk && !dialogs.Confirm("Delete", question)) return;
 
         // Keep the cursor near where it was: on the first remaining item after the deleted block.
         var all = ActivePanel.Items;

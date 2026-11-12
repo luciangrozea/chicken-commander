@@ -3,13 +3,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Change attributes" Width="400" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-        Background="{StaticResource ChromeBrush}">
+        Background="{DynamicResource ChromeBrush}">
     <StackPanel Margin="14">
         <TextBlock x:Name="TargetText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,0,10" />
 
         <GroupBox Header="Attributes" Padding="8">
             <StackPanel>
-                <TextBlock Text="A filled box means: leave as it is (items differ)." Foreground="#5A6275" FontSize="11" Margin="0,0,0,6" />
+                <TextBlock Text="A filled box means: leave as it is (items differ)." Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,6" />
                 <CheckBox x:Name="ReadOnlyBox" Content="_Read only" IsThreeState="True" Margin="0,2" />
                 <CheckBox x:Name="ArchiveBox" Content="_Archive" IsThreeState="True" Margin="0,2" />
                 <CheckBox x:Name="HiddenBox" Content="_Hidden" IsThreeState="True" Margin="0,2" />

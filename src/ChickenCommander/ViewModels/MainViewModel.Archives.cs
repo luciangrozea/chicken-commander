@@ -1,6 +1,7 @@
 using ChickenCommander.Core.FileSystem;
 using ChickenCommander.Core.Operations;
 using ChickenCommander.Core.Remote;
+using ChickenCommander.Core.Settings;
 using ChickenCommander.Core.Tools;
 using ChickenCommander.Core.Vfs;
 using ChickenCommander.Services;
@@ -21,6 +22,17 @@ public partial class MainViewModel
     /// <summary>A local folder for programs and relative paths: the panel's folder, or the user's home when the panel is virtual.</summary>
     private string WorkingDirectory =>
         ActivePanel.IsLocal ? ActivePanel.CurrentPath : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    public string WorkingFolder => WorkingDirectory;
+
+    public AppSettings Settings => settings;
+
+    /// <summary>After the Settings dialog: reload the panels so list-related options take effect.</summary>
+    public void ApplySettingsChanges()
+    {
+        Left.Refresh();
+        Right.Refresh();
+    }
 
     private bool RequireLocal(string feature)
     {

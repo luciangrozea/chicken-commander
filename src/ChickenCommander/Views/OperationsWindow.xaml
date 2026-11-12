@@ -4,18 +4,18 @@
         xmlns:vm="clr-namespace:ChickenCommander.ViewModels"
         Title="File operations" Width="560" Height="300" MinHeight="180"
         ShowInTaskbar="False" ShowActivated="False" WindowStartupLocation="CenterOwner"
-        Background="{StaticResource ChromeBrush}" Icon="/Assets/chicken.ico">
+        Background="{DynamicResource ChromeBrush}" Icon="/Assets/chicken.ico">
     <DockPanel Margin="10">
         <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
             <Button DockPanel.Dock="Right" Content="Hide" Width="80" Click="Hide_Click" IsCancel="True" />
-            <TextBlock Text="Jobs run one after another. Closing this window does not stop them." Foreground="#5A6275"
+            <TextBlock Text="Jobs run one after another. Closing this window does not stop them." Foreground="{DynamicResource TextMutedBrush}"
                        VerticalAlignment="Center" FontSize="11" />
         </DockPanel>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding Items}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:TransferOperationViewModel}">
-                        <Border Background="White" BorderBrush="#C9CFDB" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,8">
+                        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,8">
                             <StackPanel>
                                 <DockPanel>
                                     <Button DockPanel.Dock="Right" Content="Cancel" Width="70" Margin="6,0,0,0" Command="{Binding CancelCommand}" />
@@ -36,12 +36,12 @@
                                     </Button>
                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                 </DockPanel>
-                                <TextBlock Text="{Binding CurrentFile}" Margin="0,6,0,2" Foreground="#3A4256" TextTrimming="CharacterEllipsis" FontSize="11" />
-                                <ProgressBar Value="{Binding FilePercent, Mode=OneWay}" Height="6" Foreground="{StaticResource OrangeBrush}" />
-                                <ProgressBar Value="{Binding TotalPercent, Mode=OneWay}" Height="10" Margin="0,4,0,0" Foreground="{StaticResource CursorBrush}" />
+                                <TextBlock Text="{Binding CurrentFile}" Margin="0,6,0,2" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis" FontSize="11" />
+                                <ProgressBar Value="{Binding FilePercent, Mode=OneWay}" Height="6" Foreground="{DynamicResource OrangeBrush}" />
+                                <ProgressBar Value="{Binding TotalPercent, Mode=OneWay}" Height="10" Margin="0,4,0,0" Foreground="{DynamicResource CursorBrush}" />
                                 <DockPanel Margin="0,4,0,0">
-                                    <TextBlock DockPanel.Dock="Right" Text="{Binding State}" Foreground="#5A6275" FontSize="11" />
-                                    <TextBlock Text="{Binding DetailText}" Foreground="#5A6275" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding State}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" />
+                                    <TextBlock Text="{Binding DetailText}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
                                 </DockPanel>
                             </StackPanel>
                         </Border>

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Connect to server" Width="720" Height="470" MinWidth="600" MinHeight="420"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Icon="/Assets/chicken.ico"
-        Background="{StaticResource ChromeBrush}">
+        Background="{DynamicResource ChromeBrush}">
     <DockPanel Margin="12">
         <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
@@ -11,7 +11,7 @@
                 <Button Content="Close" Width="80" IsCancel="True" />
             </StackPanel>
             <TextBlock Text="Passwords are saved encrypted for your Windows account (DPAPI), only if you tick “Save password”."
-                       Foreground="#5A6275" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,10,0" />
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,10,0" />
         </DockPanel>
 
         <DockPanel DockPanel.Dock="Left" Width="210" Margin="0,0,12,0">
@@ -73,7 +73,7 @@
             </DockPanel>
             <TextBlock Grid.Row="7" Text="Start _folder:" />
             <TextBox x:Name="FolderBox" Grid.Row="7" Grid.Column="1" Text="/" />
-            <TextBlock x:Name="FingerprintText" Grid.Row="8" Grid.ColumnSpan="2" Foreground="#5A6275" FontSize="11" TextWrapping="Wrap" />
+            <TextBlock x:Name="FingerprintText" Grid.Row="8" Grid.ColumnSpan="2" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" />
         </Grid>
     </DockPanel>
 </Window>

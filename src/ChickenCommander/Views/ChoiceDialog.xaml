@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Width="520" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-        Background="{StaticResource ChromeBrush}">
+        Background="{DynamicResource ChromeBrush}">
     <StackPanel Margin="16">
         <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontWeight="SemiBold" />
-        <TextBlock x:Name="DetailsText" TextWrapping="Wrap" Margin="0,10,0,0" FontFamily="Consolas" Foreground="#3A4256" />
+        <TextBlock x:Name="DetailsText" TextWrapping="Wrap" Margin="0,10,0,0" FontFamily="Consolas" Foreground="{DynamicResource TextMutedBrush}" />
         <WrapPanel x:Name="Buttons" HorizontalAlignment="Right" Margin="0,16,0,0" />
     </StackPanel>
 </Window>

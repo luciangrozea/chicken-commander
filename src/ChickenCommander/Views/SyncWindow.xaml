@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Synchronize directories" Width="1100" Height="700" MinWidth="760" MinHeight="420"
         WindowStartupLocation="CenterOwner" Icon="/Assets/chicken.ico"
-        Background="{StaticResource ChromeBrush}">
+        Background="{DynamicResource ChromeBrush}">
     <DockPanel Margin="10">
         <Grid DockPanel.Dock="Top">
             <Grid.ColumnDefinitions>
@@ -35,12 +35,12 @@
                 <Button x:Name="SyncButton" Content="_Synchronize" Width="110" Click="Sync_Click" IsEnabled="False" Margin="0,0,8,0" FontWeight="Bold" />
                 <Button Content="Close" Width="80" IsCancel="True" Click="Close_Click" />
             </StackPanel>
-            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="#3A4256" TextTrimming="CharacterEllipsis"
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis"
                        Text="Click a row's arrow (or press Space) to change what happens: → copy right, ← copy left, or nothing." />
         </DockPanel>
 
         <DataGrid x:Name="Rows" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
-                  GridLinesVisibility="None" RowHeight="20" BorderBrush="#C9CFDB" Background="White"
+                  GridLinesVisibility="None" RowHeight="20" BorderBrush="{DynamicResource AppBorderBrush}" Background="{DynamicResource SurfaceBrush}"
                   SelectionMode="Extended" PreviewKeyDown="Rows_PreviewKeyDown" EnableRowVirtualization="True">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Left" Binding="{Binding LeftName}" Width="*" />

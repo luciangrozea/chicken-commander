@@ -1,17 +1,20 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
+using ChickenCommander.Commands;
 using ChickenCommander.Core.FileSystem;
 using ChickenCommander.Core.Operations;
 using ChickenCommander.Core.Remote;
 using ChickenCommander.Core.Settings;
 using ChickenCommander.Core.Tools;
 using ChickenCommander.Core.Vfs;
+using System.Windows.Media;
 using ChickenCommander.Services;
+using ChickenCommander.Themes;
 using ChickenCommander.Viewer;
 using ChickenCommander.ViewModels;
 using ChickenCommander.Views;
@@ -27,8 +30,9 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
 
     public MainWindow()
     {
-        InitializeComponent();
         var settings = settingsStore.Load();
+        ThemeManager.Apply(settings.Theme); // before the window is built, so it never flashes in the wrong colours
+        InitializeComponent();
         ApplySavedBounds(settings.Window);
 
         vm = new MainViewModel(this, settings, operations);
@@ -78,7 +82,109 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
             };
         }
 
+        ApplyPreferences();
         Loaded += (_, _) => ActivePanelView.FocusList();
+    }
+
+    // ---- Preferences: theme, font, shortcuts, button bar --------------------------------------
+
+    /// <summary>Applies everything from the settings that affects the window; called at start and after the Settings dialog.</summary>
+    private void ApplyPreferences()
+    {
+        var s = vm.Settings;
+        ThemeManager.Apply(s.Theme);
+        Application.Current.Resources["ListFontSize"] = Math.Clamp(s.ListFontSize, 9, 24);
+        shortcuts = new ShortcutMap(CommandRegistry.DefaultGestures, s.Shortcuts);
+        UpdateMenuGestures(MainMenu.Items);
+        BuildButtonBar();
+        ButtonBarHost.Visibility = s.ShowButtonBar ? Visibility.Visible : Visibility.Collapsed;
+        ButtonBarMenuItem.IsChecked = s.ShowButtonBar;
+    }
+
+    /// <summary>Shows each menu item's current shortcut (they can be changed in Settings).</summary>
+    private void UpdateMenuGestures(ItemCollection items)
+    {
+        foreach (var item in items.OfType<MenuItem>())
+        {
+            if (item.Tag is string id) item.InputGestureText = string.Join(" / ", shortcuts.GesturesFor(id).Select(KeyNames.Display));
+            UpdateMenuGestures(item.Items);
+        }
+    }
+
+    private void BuildButtonBar()
+    {
+        ButtonBarPanel.Children.Clear();
+        foreach (var item in vm.Settings.ButtonBar ?? CommandRegistry.DefaultButtonBar())
+        {
+            if (item.Kind == ButtonKind.Separator)
+            {
+                ButtonBarPanel.Children.Add(new Border { Width = 1, Margin = new Thickness(6, 4, 6, 4), Background = (Brush)FindResource("AppBorderBrush") });
+                continue;
+            }
+
+            var command = item.Kind == ButtonKind.Command ? CommandRegistry.Find(item.CommandId) : null;
+            if (item.Kind == ButtonKind.Command && command is null) continue; // unknown id in an old settings file
+            var glyph = item.Glyph ?? command?.Glyph ?? CommandRegistry.ProgramGlyph;
+            var tip = item.Label ?? command?.Title ?? Path.GetFileNameWithoutExtension(item.Program) ?? "Program";
+            if (command is not null && shortcuts.GesturesFor(command.Id) is { Count: > 0 } gestures)
+                tip += $"  ({KeyNames.Display(gestures[0])})";
+
+            var button = new Button
+            {
+                Content = new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("IconFont"), FontSize = 16 },
+                ToolTip = tip,
+                Focusable = false,
+                Padding = new Thickness(7, 4, 7, 4),
+                Margin = new Thickness(1),
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Tag = item,
+            };
+            button.SetResourceReference(ForegroundProperty, "TextBrush");
+            button.Click += ButtonBar_Click;
+            ButtonBarPanel.Children.Add(button);
+        }
+    }
+
+    private void ButtonBar_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: ButtonBarItem item }) return;
+        if (item.Kind == ButtonKind.Command)
+        {
+            CommandRegistry.Find(item.CommandId)?.Execute(this);
+            return;
+        }
+
+        // External program with placeholders (%P folder, %N name, %F full path, %S selection, %T other panel).
+        var panel = vm.ActivePanel;
+        var current = panel.CurrentItem is { IsParentLink: false } c ? c.Entry.Name : null;
+        var selection = panel.SelectionOrCurrent().Select(i => i.Entry.FullPath).ToList();
+        var args = ButtonArguments.Expand(item.Arguments ?? string.Empty, vm.WorkingFolder, current, selection, vm.InactivePanel.CurrentPath);
+        StartInWorkingDirectory(item.Program ?? string.Empty, args);
+        ActivePanelView.FocusList();
+    }
+
+    private void ToggleButtonBar_Click(object sender, RoutedEventArgs e)
+    {
+        vm.Settings.ShowButtonBar = !vm.Settings.ShowButtonBar;
+        ApplyPreferences();
+    }
+
+    private void GitHub_Click(object sender, RoutedEventArgs e) =>
+        Process.Start(new ProcessStartInfo("https://github.com/luciangrozea/chicken-commander") { UseShellExecute = true });
+
+    /// <summary>Opens the Settings dialog and applies the changes right away.</summary>
+    internal void ShowSettings()
+    {
+        var window = new SettingsWindow(vm.Settings) { Owner = this };
+        if (window.ShowDialog() == true)
+        {
+            vm.ApplySettingsChanges();
+            ApplyPreferences();
+            try { settingsStore.Save(vm.CaptureSettings()); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { ShowError("Settings", ex.Message); }
+        }
+        ActivePanelView.FocusList();
     }
 
     private readonly System.Windows.Threading.DispatcherTimer quickViewTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
@@ -121,7 +227,9 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
         }
     }
 
-    private FilePanel ActivePanelView => vm.ActivePanel == vm.Left ? LeftPanel : RightPanel;
+    internal FilePanel ActivePanelView => vm.ActivePanel == vm.Left ? LeftPanel : RightPanel;
+
+    private ShortcutMap shortcuts = new(CommandRegistry.DefaultGestures);
 
     // ---- Window state ----------------------------------------------------------------------
 
@@ -187,64 +295,27 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         var mods = Keyboard.Modifiers;
-        e.Handled = HandleGlobalKey(key, mods) || (!IsTextBoxFocused && HandleListKey(key, mods));
+        e.Handled = (!IsTextBoxFocused && HandleContextKey(key, mods)) || RunShortcut(key, mods);
     }
 
-    /// <summary>Keys that work everywhere in the main window, including the command line.</summary>
-    private bool HandleGlobalKey(Key key, ModifierKeys mods)
+    /// <summary>Looks the key up in the (customizable) shortcut map and runs the command.</summary>
+    private bool RunShortcut(Key key, ModifierKeys mods)
     {
-        const ModifierKeys CtrlShift = ModifierKeys.Control | ModifierKeys.Shift;
-        switch (key, mods)
-        {
-            case (Key.Tab, ModifierKeys.None):
-            case (Key.Tab, ModifierKeys.Shift):
-                vm.SwitchPanelCommand.Execute(null);
-                return true;
-            case (Key.Tab, ModifierKeys.Control): vm.NextTabCommand.Execute(null); return true;
-            case (Key.Tab, CtrlShift): vm.PreviousTabCommand.Execute(null); return true;
-            case (Key.T, ModifierKeys.Control): vm.NewTabCommand.Execute(null); return true;
-            case (Key.W, ModifierKeys.Control): vm.CloseTabCommand.Execute(null); return true;
-            case (Key.F1, ModifierKeys.None): ShowShortcuts(); return true;
-            case (Key.F3, ModifierKeys.None): vm.ViewCommand.Execute(null); return true;
-            case (Key.F4, ModifierKeys.None): vm.EditCommand.Execute(null); return true;
-            case (Key.F5, ModifierKeys.None): vm.CopyCommand.Execute(null); return true;
-            case (Key.F6, ModifierKeys.None): vm.MoveCommand.Execute(null); return true;
-            case (Key.F6, ModifierKeys.Shift): vm.RenameCommand.Execute(null); return true;
-            case (Key.F7, ModifierKeys.None): vm.MakeDirectoryCommand.Execute(null); return true;
-            case (Key.F8, ModifierKeys.None): vm.DeleteCommand.Execute(null); return true;
-            case (Key.F8, ModifierKeys.Shift): vm.DeletePermanentlyCommand.Execute(null); return true;
-            case (Key.F1, ModifierKeys.Alt): LeftPanel.OpenDriveList(); return true;
-            case (Key.F2, ModifierKeys.Alt): RightPanel.OpenDriveList(); return true;
-            case (Key.Left, ModifierKeys.Alt): vm.GoBackCommand.Execute(null); return true;
-            case (Key.Right, ModifierKeys.Alt): vm.GoForwardCommand.Execute(null); return true;
-            case (Key.Down, ModifierKeys.Alt): vm.ShowHistoryCommand.Execute(null); return true;
-            case (Key.D, ModifierKeys.Control): vm.ShowHotlistCommand.Execute(null); return true;
-            case (Key.M, ModifierKeys.Control): vm.MultiRenameCommand.Execute(null); return true;
-            case (Key.I, ModifierKeys.Control): vm.ChangeAttributesCommand.Execute(null); return true;
-            case (Key.O, CtrlShift): vm.ShowOperationsCommand.Execute(null); return true;
-            case (Key.F7, ModifierKeys.Alt): vm.SearchCommand.Execute(null); return true;
-            case (Key.F5, ModifierKeys.Alt): vm.PackCommand.Execute(null); return true;
-            case (Key.F9, ModifierKeys.Alt): vm.UnpackCommand.Execute(null); return true;
-            case (Key.N, ModifierKeys.Control): vm.ConnectCommand.Execute(null); return true;
-            case (Key.N, CtrlShift): vm.DisconnectCommand.Execute(null); return true;
-            case (Key.Q, ModifierKeys.Control): vm.ToggleQuickViewCommand.Execute(null); return true;
-            case (Key.C, CtrlShift): vm.CompareFilesCommand.Execute(null); return true;
-            case (Key.S, CtrlShift): vm.SyncDirectoriesCommand.Execute(null); return true;
-            case (Key.R, ModifierKeys.Control): vm.RefreshCommand.Execute(null); return true;
-            case (Key.U, ModifierKeys.Control): vm.SwapPanelsCommand.Execute(null); return true;
-            case (Key.E, ModifierKeys.Control): vm.TargetEqualsSourceCommand.Execute(null); return true;
-            case (Key.H, ModifierKeys.Control): vm.ToggleHiddenCommand.Execute(null); return true;
-            case (Key.L, ModifierKeys.Control): ActivePanelView.FocusPathBox(); return true;
-            default: return false;
-        }
+        if (IsTextBoxFocused && !KeyNames.AllowedInTextBox(key, mods)) return false;
+        if (KeyNames.From(key, mods) is not { } gesture) return false;
+        if (CommandRegistry.Find(shortcuts.CommandFor(gesture)) is not { } command) return false;
+        command.Execute(this);
+        return true;
     }
 
-    /// <summary>Keys for the file list. Typing printable characters goes to the command line (see PreviewTextInput).</summary>
-    private bool HandleListKey(Key key, ModifierKeys mods)
+    /// <summary>
+    /// Built-in keys whose meaning depends on the command line, so they are not remappable:
+    /// Enter, Ctrl+Enter, Backspace, Esc and Space. Typing printable characters goes to the command line.
+    /// </summary>
+    private bool HandleContextKey(Key key, ModifierKeys mods)
     {
         var panel = vm.ActivePanel;
         var hasCommand = vm.CommandLine.Length > 0;
-
         switch (key, mods)
         {
             case (Key.Enter, ModifierKeys.None):
@@ -256,50 +327,47 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
                 if (panel.CurrentItem is { IsParentLink: false } item)
                     vm.CommandLine += (item.Entry.Name.Contains(' ') ? $"\"{item.Entry.Name}\"" : item.Entry.Name) + " ";
                 return true;
-            case (Key.Up, ModifierKeys.Control): vm.OpenInNewTabCommand.Execute(null); return true;
             case (Key.Back, ModifierKeys.None):
                 if (hasCommand) vm.CommandLine = vm.CommandLine[..^1];
                 else panel.GoUp();
                 return true;
-            case (Key.PageUp, ModifierKeys.Control):
-                panel.GoUp();
-                return true;
-            case (Key.Home, ModifierKeys.None):
-                ActivePanelView.MoveCursorToEdge(last: false);
-                return true;
-            case (Key.End, ModifierKeys.None):
-                ActivePanelView.MoveCursorToEdge(last: true);
-                return true;
-            case (Key.PageDown, ModifierKeys.Control): // open the archive (or folder) under the cursor
-                vm.OpenCurrent();
-                return true;
-            case (Key.Oem5, ModifierKeys.Control): // Ctrl+\ : go to the drive root
-                panel.Navigate(Path.GetPathRoot(panel.CurrentPath)!);
-                return true;
-            case (Key.Escape, ModifierKeys.None):
+            case (Key.Escape, ModifierKeys.None) when hasCommand:
                 vm.CommandLine = string.Empty;
-                return true;
-            case (Key.Insert, ModifierKeys.None):
-                panel.ToggleMark(panel.CurrentItem);
-                ActivePanelView.MoveCursor(1);
                 return true;
             case (Key.Space, ModifierKeys.None) when !hasCommand:
                 panel.ToggleMark(panel.CurrentItem);
                 return true;
-            case (Key.Delete, ModifierKeys.None): vm.DeleteCommand.Execute(null); return true;
-            case (Key.Delete, ModifierKeys.Shift): vm.DeletePermanentlyCommand.Execute(null); return true;
-            case (Key.Add, ModifierKeys.None): vm.SelectGroupCommand.Execute(null); return true;
-            case (Key.Subtract, ModifierKeys.None): vm.UnselectGroupCommand.Execute(null); return true;
-            case (Key.Multiply, ModifierKeys.None): vm.InvertSelectionCommand.Execute(null); return true;
-            case (Key.Add, ModifierKeys.Control):
-            case (Key.A, ModifierKeys.Control):
-                vm.SelectAllCommand.Execute(null);
-                return true;
-            case (Key.Subtract, ModifierKeys.Control):
-            case (Key.A, ModifierKeys.Control | ModifierKeys.Shift):
-                vm.UnselectAllCommand.Execute(null);
-                return true;
-            default: return false;
+            default:
+                return false;
+        }
+    }
+
+    // ---- Helpers used by commands ------------------------------------------------------------
+
+    internal MainViewModel Vm => vm;
+
+    internal void GoToRoot()
+    {
+        var parent = vm.ActivePanel.CurrentPath;
+        while (vm.Vfs.GetParent(parent) is { } p) parent = p;
+        vm.ActivePanel.Navigate(parent);
+    }
+
+    internal void MarkAndMoveDown()
+    {
+        vm.ActivePanel.ToggleMark(vm.ActivePanel.CurrentItem);
+        ActivePanelView.MoveCursor(1);
+    }
+
+    internal void StartInWorkingDirectory(string program, string? arguments)
+    {
+        try
+        {
+            CommandRegistry.Start(program, arguments, vm.WorkingFolder);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            ShowError(program, ex.Message);
         }
     }
 
@@ -332,44 +400,32 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
 
     private void Exit_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void OpenCmd_Click(object sender, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo("cmd.exe") { UseShellExecute = true, WorkingDirectory = vm.ActivePanel.CurrentPath });
+    /// <summary>Menu items carry the command id in their Tag, so they run exactly what the shortcut runs.</summary>
+    private void Command_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string id } && CommandRegistry.Find(id) is { } command) command.Execute(this);
+    }
 
-    private void OpenExplorer_Click(object sender, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{vm.ActivePanel.CurrentPath}\"") { UseShellExecute = true });
-
-    private void Shortcuts_Click(object sender, RoutedEventArgs e) => ShowShortcuts();
-
-    private void ShowShortcuts() => MessageBox.Show(this,
-        """
-        Tab                 Switch panel
-        Enter               Open folder / run file (or run command line)
-        Backspace           Parent folder
-        Alt+Left / Right    Back / forward      Alt+Down  Folder history
-        Ctrl+D              Directory hotlist
-        Ctrl+\              Drive root
-        Alt+F1 / Alt+F2     Choose drive (left / right)
-        Ctrl+L              Edit path
-
-        Ctrl+T / Ctrl+W     New / close tab
-        Ctrl+Tab            Next tab (Shift: previous)
-        Ctrl+Up             Open folder under cursor in new tab
-
-        Insert / Space      Mark item
-        Num + / Num -       Mark / unmark by mask
-        Num *               Invert marks
-        Ctrl+A / Ctrl+Shift+A  Mark all / unmark all
-
-        F3 View    F4 Edit    F5 Copy    F6 Move
-        Shift+F6 Rename       F7 New folder
-        F8 / Del  Delete      Shift+Del  Delete permanently
-        Ctrl+M  Multi-Rename  Ctrl+I  Attributes
-
-        Ctrl+R  Refresh       Ctrl+H  Hidden files
-        Ctrl+U  Swap panels   Ctrl+E  Target = Source
-        Ctrl+Enter  Name to command line
-        Typing goes to the command line.
-        """, "Keyboard shortcuts", MessageBoxButton.OK, MessageBoxImage.Information);
+    /// <summary>F1: the current shortcuts (including the user's changes), grouped by category.</summary>
+    internal void ShowShortcuts()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Enter  open · Backspace  parent folder · Space  mark · Esc  clear command line");
+        sb.AppendLine("Typing goes to the command line; Ctrl+Enter adds the name under the cursor.");
+        foreach (var group in CommandRegistry.All.GroupBy(c => c.Category))
+        {
+            sb.AppendLine();
+            sb.AppendLine(group.Key.ToUpperInvariant());
+            foreach (var c in group)
+            {
+                var gestures = shortcuts.GesturesFor(c.Id);
+                if (gestures.Count > 0) sb.AppendLine($"  {string.Join(" / ", gestures.Select(KeyNames.Display)),-26} {c.Title}");
+            }
+        }
+        sb.AppendLine();
+        sb.AppendLine("Change shortcuts in Settings (Ctrl+,) → Keyboard.");
+        MessageBox.Show(this, sb.ToString(), "Keyboard shortcuts", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
 
     // ---- IDialogService --------------------------------------------------------------------
 

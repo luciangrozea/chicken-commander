@@ -4,7 +4,7 @@
         xmlns:vm="clr-namespace:ChickenCommander.ViewModels"
         Title="Multi-Rename Tool" Width="900" Height="620" MinWidth="700" MinHeight="420"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Icon="/Assets/chicken.ico"
-        Background="{StaticResource ChromeBrush}">
+        Background="{DynamicResource ChromeBrush}">
     <Window.Resources>
         <Style TargetType="GroupBox">
             <Setter Property="Margin" Value="0,0,8,8" />
@@ -91,21 +91,21 @@
                 <Button Content="Start!" Width="90" Command="{Binding StartCommand}" FontWeight="Bold" Margin="0,0,8,0" />
                 <Button Content="Close" Width="80" IsCancel="True" Click="Close_Click" />
             </StackPanel>
-            <TextBlock Text="{Binding Summary}" VerticalAlignment="Center" Foreground="#3A4256" />
+            <TextBlock Text="{Binding Summary}" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" />
         </DockPanel>
 
         <DataGrid ItemsSource="{Binding Previews}" AutoGenerateColumns="False" IsReadOnly="True"
                   HeadersVisibility="Column" GridLinesVisibility="None" RowHeight="20"
-                  BorderBrush="#C9CFDB" Background="White" CanUserSortColumns="False">
+                  BorderBrush="{DynamicResource AppBorderBrush}" Background="{DynamicResource SurfaceBrush}" CanUserSortColumns="False">
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding Changes}" Value="True">
-                            <Setter Property="Foreground" Value="#1B2A55" />
+                            <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </DataTrigger>
                         <DataTrigger Binding="{Binding Error, Converter={x:Static vm:NotNullConverter.Instance}}" Value="True">
-                            <Setter Property="Foreground" Value="{StaticResource MarkedBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource MarkedBrush}" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>

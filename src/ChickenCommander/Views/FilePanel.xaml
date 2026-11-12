@@ -14,7 +14,7 @@
                     </DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
-            <TextBlock Text="{Binding FreeSpaceText}" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="#5A6275"
+            <TextBlock Text="{Binding FreeSpaceText}" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource TextMutedBrush}"
                        TextTrimming="CharacterEllipsis" />
         </DockPanel>
 
@@ -44,17 +44,18 @@
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="ListBoxItem">
-                                <Border x:Name="Chip" Background="#E3E7EF" BorderBrush="#C9CFDB" BorderThickness="1,1,1,0"
+                                <Border x:Name="Chip" Background="{DynamicResource TabBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1,1,1,0"
                                         CornerRadius="4,4,0,0" Padding="10,2" Margin="0,0,2,0">
-                                    <TextBlock x:Name="Label" Text="{Binding Title}" MaxWidth="160" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="Label" Text="{Binding Title}" MaxWidth="160" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextBrush}" />
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsSelected" Value="True">
-                                        <Setter TargetName="Chip" Property="Background" Value="White" />
+                                        <Setter TargetName="Chip" Property="Background" Value="{DynamicResource TabSelectedBrush}" />
                                         <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
                                     </Trigger>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Chip" Property="BorderBrush" Value="#2F5AA8" />
+                                        <Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource CursorBrush}" />
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -69,19 +70,30 @@
                  BorderThickness="0" FontWeight="SemiBold" KeyDown="PathBox_KeyDown">
             <TextBox.Style>
                 <Style TargetType="TextBox">
-                    <Setter Property="Background" Value="{StaticResource PanelHeaderInactiveBrush}" />
-                    <Setter Property="Foreground" Value="#1B2A55" />
+                    <Setter Property="Background" Value="{DynamicResource PanelHeaderInactiveBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource PanelHeaderInactiveTextBrush}" />
+                    <Setter Property="CaretBrush" Value="{DynamicResource PanelHeaderActiveTextBrush}" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <!-- Plain template: the Fluent text box adds borders and focus underlines that do not fit a header bar -->
+                            <ControlTemplate TargetType="TextBox">
+                                <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                    <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding IsActive}" Value="True">
-                            <Setter Property="Background" Value="{StaticResource NavyBrush}" />
-                            <Setter Property="Foreground" Value="White" />
+                            <Setter Property="Background" Value="{DynamicResource PanelHeaderActiveBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource PanelHeaderActiveTextBrush}" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </TextBox.Style>
         </TextBox>
 
-        <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" Padding="4,2" Background="{StaticResource ChromeBrush}"
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" Padding="4,2" Background="{DynamicResource ChromeBrush}"
                    TextTrimming="CharacterEllipsis" />
 
         <DataGrid x:Name="Grid"
@@ -93,22 +105,24 @@
                   CanUserReorderColumns="False" CanUserResizeRows="False" CanUserSortColumns="True"
                   EnableRowVirtualization="True" VirtualizingPanel.VirtualizationMode="Recycling"
                   KeyboardNavigation.TabNavigation="Once"
-                  BorderThickness="1" BorderBrush="#C9CFDB" Background="White" RowBackground="White"
-                  RowHeight="20"
+                  BorderThickness="1" BorderBrush="{DynamicResource AppBorderBrush}" Background="{DynamicResource SurfaceBrush}" RowBackground="{DynamicResource SurfaceBrush}"
+                  FontSize="{DynamicResource ListFontSize}" Foreground="{DynamicResource TextBrush}"
                   Sorting="Grid_Sorting"
                   MouseDoubleClick="Grid_MouseDoubleClick">
             <DataGrid.Resources>
                 <!-- Cursor colours: strong on the active panel, faint on the inactive one -->
-                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#2F5AA8" />
-                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="White" />
-                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#DCE3F0" />
-                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="{DynamicResource CursorColor}" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="{DynamicResource CursorTextColor}" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="{DynamicResource CursorInactiveColor}" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="{DynamicResource CursorInactiveTextColor}" />
             </DataGrid.Resources>
             <DataGrid.CellStyle>
                 <Style TargetType="DataGridCell">
                     <Setter Property="BorderThickness" Value="0" />
                     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-                    <Setter Property="Padding" Value="3,0" />
+                    <Setter Property="Padding" Value="3,1" />
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=DataGridRow}}" />
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="DataGridCell">
@@ -118,26 +132,93 @@
                             </ControlTemplate>
                         </Setter.Value>
                     </Setter>
+                    <!-- The cursor colour is painted on the cells: they span the whole row and nothing else overrides them -->
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
+                                <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Background" Value="{DynamicResource CursorBrush}" />
+                        </MultiDataTrigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
+                                <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="False" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Background" Value="{DynamicResource CursorInactiveBrush}" />
+                        </MultiDataTrigger>
+                    </Style.Triggers>
                 </Style>
             </DataGrid.CellStyle>
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
                     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+                    <!-- Own row template: the Fluent theme's row ignores Background, so the cursor colour would not show -->
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <!-- DataGrid forces each row's Background from its RowBackground, so the cursor colour is set on this border instead -->
+                            <ControlTemplate TargetType="DataGridRow">
+                                <Border x:Name="RowBorder" Background="{DynamicResource SurfaceBrush}" SnapsToDevicePixels="True">
+                                    <SelectiveScrollingGrid>
+                                        <SelectiveScrollingGrid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </SelectiveScrollingGrid.ColumnDefinitions>
+                                        <SelectiveScrollingGrid.RowDefinitions>
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </SelectiveScrollingGrid.RowDefinitions>
+                                        <DataGridCellsPresenter Grid.Column="1" ItemsPanel="{TemplateBinding ItemsPanel}"
+                                                                SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                                        <DataGridDetailsPresenter Grid.Column="1" Grid.Row="1" Visibility="{TemplateBinding DetailsVisibility}"
+                                                                  SelectiveScrollingGrid.SelectiveScrollingOrientation="Horizontal" />
+                                    </SelectiveScrollingGrid>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource TemplatedParent}}" Value="True" />
+                                            <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="False" />
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter TargetName="RowBorder" Property="Background" Value="{DynamicResource CursorInactiveBrush}" />
+                                    </MultiDataTrigger>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource TemplatedParent}}" Value="True" />
+                                            <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True" />
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter TargetName="RowBorder" Property="Background" Value="{DynamicResource CursorBrush}" />
+                                    </MultiDataTrigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                    <!-- Later triggers win: hidden < marked < cursor (inactive / active panel) < marked under cursor -->
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding IsHidden}" Value="True">
-                            <Setter Property="Foreground" Value="#8A90A0" />
+                            <Setter Property="Foreground" Value="{DynamicResource HiddenTextBrush}" />
                         </DataTrigger>
                         <DataTrigger Binding="{Binding IsMarked}" Value="True">
-                            <Setter Property="Foreground" Value="{StaticResource MarkedBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource MarkedBrush}" />
                             <Setter Property="FontWeight" Value="Bold" />
                         </DataTrigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
+                                <Condition Binding="{Binding DataContext.IsActive, ElementName=Root}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Foreground" Value="{DynamicResource PanelHeaderActiveTextBrush}" />
+                        </MultiDataTrigger>
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
                                 <Condition Binding="{Binding IsMarked}" Value="True" />
                                 <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
                                 <Condition Binding="{Binding DataContext.IsActive, ElementName=Root}" Value="True" />
                             </MultiDataTrigger.Conditions>
-                            <Setter Property="Foreground" Value="{StaticResource OrangeBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource MarkedCursorBrush}" />
                         </MultiDataTrigger>
                     </Style.Triggers>
                 </Style>
@@ -162,7 +243,7 @@
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
                 <DataGridTextColumn Header="Date" Binding="{Binding DateText}" Width="115" SortMemberPath="Date" />
-                <DataGridTextColumn Header="Attr" Binding="{Binding Attr}" Width="42" SortMemberPath="Attr" />
+                <DataGridTextColumn Header="Attr" Binding="{Binding Attr}" Width="54" SortMemberPath="Attr" />
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

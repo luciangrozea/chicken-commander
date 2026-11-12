@@ -3,23 +3,23 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:tools="clr-namespace:ChickenCommander.Core.Tools;assembly=ChickenCommander.Core"
         Title="Verify checksums" Width="760" Height="460" WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False" Icon="/Assets/chicken.ico" Background="{StaticResource ChromeBrush}">
+        ShowInTaskbar="False" Icon="/Assets/chicken.ico" Background="{DynamicResource ChromeBrush}">
     <DockPanel Margin="12">
         <TextBlock x:Name="SummaryText" DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,8" TextWrapping="Wrap" />
         <Button DockPanel.Dock="Bottom" Content="Close" Width="80" HorizontalAlignment="Right" IsCancel="True" IsDefault="True" Margin="0,8,0,0" Click="Close_Click" />
         <DataGrid x:Name="Rows" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
-                  GridLinesVisibility="None" RowHeight="20" BorderBrush="#C9CFDB" Background="White">
+                  GridLinesVisibility="None" RowHeight="20" BorderBrush="{DynamicResource AppBorderBrush}" Background="{DynamicResource SurfaceBrush}">
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding State}" Value="{x:Static tools:VerifyState.Mismatch}">
-                            <Setter Property="Background" Value="#FBE0E2" />
+                            <Setter Property="Background" Value="{DynamicResource DiffDeletedBrush}" />
                         </DataTrigger>
                         <DataTrigger Binding="{Binding State}" Value="{x:Static tools:VerifyState.Missing}">
-                            <Setter Property="Background" Value="#FFF4D6" />
+                            <Setter Property="Background" Value="{DynamicResource DiffModifiedBrush}" />
                         </DataTrigger>
                         <DataTrigger Binding="{Binding State}" Value="{x:Static tools:VerifyState.Error}">
-                            <Setter Property="Background" Value="#FFF4D6" />
+                            <Setter Property="Background" Value="{DynamicResource DiffModifiedBrush}" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>

@@ -29,6 +29,25 @@ public sealed class AppSettings
     public bool ShowHidden { get; set; }
     public List<HotlistEntry> Hotlist { get; set; } = [];
     public List<Remote.RemoteConnection> Connections { get; set; } = [];
+
+    /// <summary>"System" (follow Windows), "Light" or "Dark".</summary>
+    public string Theme { get; set; } = "System";
+
+    /// <summary>Font size of the file lists.</summary>
+    public double ListFontSize { get; set; } = 13;
+
+    public bool ConfirmDelete { get; set; } = true;
+
+    /// <summary>Del / F8 send to the Recycle Bin (Shift+Del always deletes permanently).</summary>
+    public bool DeleteToRecycleBin { get; set; } = true;
+
+    public bool ShowButtonBar { get; set; } = true;
+
+    /// <summary>Null = the default buttons.</summary>
+    public List<ButtonBarItem>? ButtonBar { get; set; }
+
+    /// <summary>Only the shortcuts the user changed: command id → gestures (empty list = no shortcut).</summary>
+    public Dictionary<string, List<string>> Shortcuts { get; set; } = [];
     public WindowSettings Window { get; set; } = new();
 }
 

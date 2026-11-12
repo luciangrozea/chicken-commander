@@ -4,7 +4,7 @@
         xmlns:tools="clr-namespace:ChickenCommander.Core.Tools;assembly=ChickenCommander.Core"
         Title="Compare by content" Width="1200" Height="760" MinWidth="700" MinHeight="400"
         WindowStartupLocation="CenterOwner" Icon="/Assets/chicken.ico"
-        Background="{StaticResource ChromeBrush}" PreviewKeyDown="Window_PreviewKeyDown">
+        Background="{DynamicResource ChromeBrush}" PreviewKeyDown="Window_PreviewKeyDown">
     <DockPanel Margin="8">
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
@@ -22,25 +22,25 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="LeftTitle" Foreground="#1B2A55" TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="RightTitle" Grid.Column="1" Foreground="#1B2A55" TextTrimming="CharacterEllipsis" Margin="6,0,0,0" />
+            <TextBlock x:Name="LeftTitle" Foreground="{DynamicResource AccentTextBrush}" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="RightTitle" Grid.Column="1" Foreground="{DynamicResource AccentTextBrush}" TextTrimming="CharacterEllipsis" Margin="6,0,0,0" />
         </Grid>
 
         <DataGrid x:Name="Rows" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="None"
-                  GridLinesVisibility="None" BorderBrush="#C9CFDB" Background="White" RowHeight="19"
+                  GridLinesVisibility="None" BorderBrush="{DynamicResource AppBorderBrush}" Background="{DynamicResource SurfaceBrush}" RowHeight="19"
                   FontFamily="Cascadia Mono, Consolas" FontSize="12.5" SelectionMode="Extended"
                   EnableRowVirtualization="True" EnableColumnVirtualization="False" CanUserResizeColumns="True">
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding Kind}" Value="{x:Static tools:DiffKind.Modified}">
-                            <Setter Property="Background" Value="#FFF4D6" />
+                            <Setter Property="Background" Value="{DynamicResource DiffModifiedBrush}" />
                         </DataTrigger>
                         <DataTrigger Binding="{Binding Kind}" Value="{x:Static tools:DiffKind.Deleted}">
-                            <Setter Property="Background" Value="#FBE0E2" />
+                            <Setter Property="Background" Value="{DynamicResource DiffDeletedBrush}" />
                         </DataTrigger>
                         <DataTrigger Binding="{Binding Kind}" Value="{x:Static tools:DiffKind.Inserted}">
-                            <Setter Property="Background" Value="#DFF3E4" />
+                            <Setter Property="Background" Value="{DynamicResource DiffInsertedBrush}" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
@@ -52,15 +52,15 @@
                     <Setter Property="Foreground" Value="Black" />
                     <Style.Triggers>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="#C9D6EE" />
+                            <Setter Property="Background" Value="{DynamicResource RowSelectedBrush}" />
                         </Trigger>
                     </Style.Triggers>
                 </Style>
             </DataGrid.CellStyle>
             <DataGrid.Columns>
-                <DataGridTextColumn Binding="{Binding LeftNumber}" Width="52" Foreground="#8A90A0" />
+                <DataGridTextColumn Binding="{Binding LeftNumber}" Width="52" Foreground="{DynamicResource HiddenTextBrush}" />
                 <DataGridTextColumn Binding="{Binding Left}" Width="*" />
-                <DataGridTextColumn Binding="{Binding RightNumber}" Width="52" Foreground="#8A90A0" />
+                <DataGridTextColumn Binding="{Binding RightNumber}" Width="52" Foreground="{DynamicResource HiddenTextBrush}" />
                 <DataGridTextColumn Binding="{Binding Right}" Width="*" />
             </DataGrid.Columns>
         </DataGrid>

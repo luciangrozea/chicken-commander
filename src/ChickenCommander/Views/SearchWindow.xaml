@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Find files" Width="860" Height="640" MinWidth="620" MinHeight="420"
         WindowStartupLocation="CenterOwner" Icon="/Assets/chicken.ico" ShowInTaskbar="False"
-        Background="{StaticResource ChromeBrush}" PreviewKeyDown="Window_PreviewKeyDown">
+        Background="{DynamicResource ChromeBrush}" PreviewKeyDown="Window_PreviewKeyDown">
     <DockPanel Margin="12">
         <Grid DockPanel.Dock="Top">
             <Grid.ColumnDefinitions>
@@ -59,7 +59,7 @@
                 <Button x:Name="StartButton" Content="_Start search" Width="110" IsDefault="True" Click="Start_Click" Margin="0,0,8,0" />
                 <Button x:Name="StopButton" Content="Sto_p" Width="80" Click="Stop_Click" IsEnabled="False" />
             </StackPanel>
-            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="#5A6275" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis" />
         </DockPanel>
 
         <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
@@ -68,11 +68,11 @@
                 <Button Content="_View (F3)" Width="100" Click="View_Click" Margin="0,0,8,0" />
                 <Button Content="Close" Width="80" IsCancel="True" Click="Close_Click" />
             </StackPanel>
-            <TextBlock Text="Enter or double-click: go to file" VerticalAlignment="Center" Foreground="#5A6275" FontSize="11" />
+            <TextBlock Text="Enter or double-click: go to file" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" />
         </DockPanel>
 
         <DataGrid x:Name="Results" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
-                  GridLinesVisibility="None" RowHeight="20" BorderBrush="#C9CFDB" Background="White"
+                  GridLinesVisibility="None" RowHeight="20" BorderBrush="{DynamicResource AppBorderBrush}" Background="{DynamicResource SurfaceBrush}"
                   SelectionMode="Single" MouseDoubleClick="Results_MouseDoubleClick"
                   EnableRowVirtualization="True">
             <DataGrid.Columns>

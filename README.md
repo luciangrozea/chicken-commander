@@ -13,17 +13,32 @@
   <img alt="build" src="https://img.shields.io/badge/.NET-10-512BD4" />
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows-0078D6" />
   <img alt="license" src="https://img.shields.io/badge/license-MIT-green" />
+  <a href="https://github.com/luciangrozea/chicken-commander/actions/workflows/build.yml"><img alt="build status" src="https://github.com/luciangrozea/chicken-commander/actions/workflows/build.yml/badge.svg" /></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/luciangrozea/chicken-commander/releases/latest"><b>⬇ Download the latest release</b></a>
+  — installer (<code>ChickenCommander-Setup-x.y.z.exe</code>) or portable single file (<code>ChickenCommander.exe</code>)
 </p>
 
 <p align="center">
-  <img src="assets/screenshot.png" width="900" alt="Chicken Commander screenshot" />
+  <img src="assets/screenshot.png" width="900" alt="Chicken Commander, light theme" />
+</p>
+<p align="center">
+  <img src="assets/screenshot-dark.png" width="900" alt="Chicken Commander, dark theme" />
 </p>
 
 ---
+
+## Install
+
+- **Installer**: run `ChickenCommander-Setup-x.y.z.exe`. It installs for your user without admin rights (or for all users),
+  adds a Start menu entry and, if you want, a desktop icon. Uninstall from Windows Settings → Apps.
+- **Portable**: download `ChickenCommander.exe` and run it from anywhere. No .NET runtime needed.
+
+Settings are stored in `%AppData%\ChickenCommander\settings.json` and kept when you uninstall.
+
+> The executables are not code-signed, so Windows SmartScreen may warn the first time: choose **More info → Run anyway**.
 
 ## Features
 
@@ -57,6 +72,12 @@
 - Secure by default: SSH host keys are confirmed on first use and checked afterwards; untrusted TLS certificates need an explicit OK; saved passwords are encrypted with Windows DPAPI
 - **Checksums**: create MD5 / SHA-1 / SHA-256 / SHA-512 / CRC32 (SFV) files and verify them (GNU, BSD and SFV formats)
 
+**Customization**
+- **Light and dark themes**, or follow the Windows setting; built on WPF's Fluent theme
+- **Every shortcut can be changed** (Settings → Keyboard): press the new key combination, conflicts are shown; menus and the F1 list update themselves
+- **Button bar** with icons for any command, plus your own programs with parameters (`%P` folder, `%N` name, `%F` full path, `%S` marked files, `%T` other panel)
+- File list font size, Recycle Bin and delete-confirmation preferences
+
 **Marking & command line**
 - Insert / Space, mark by mask (`*.txt;*.md | *.bak`), invert, select all
 - Built-in command line: start typing anywhere and press Enter; `cd` navigates the active panel
@@ -86,6 +107,9 @@
 | `Ctrl+Shift+S` | Synchronize directories | `Home` / `End` | First / last item |
 | `Alt+F5` | Pack | `Alt+F9` | Unpack |
 | `Ctrl+PgDn` | Open archive | `Ctrl+N` / `Ctrl+Shift+N` | Connect / disconnect server |
+| `Ctrl+,` | Settings | `F1` | Current shortcuts |
+
+These are the defaults; all of them can be changed in Settings → Keyboard.
 
 In the viewer: `1` / `2` / `3` text / hex / image, `W` wrap, `Ctrl+F` find, `F3` find next, `N` / `P` next / previous file, `Esc` close.
 
@@ -95,7 +119,10 @@ In the viewer: `1` / `2` / `3` text / hex / image, `W` wrap, `Ctrl+F` find, `F3`
 - [x] **v0.2 – Operations**: own copy/move engine with background queue and progress, multi-rename tool, folder tabs, directory history and hotlist, file attributes dialog, saved settings
 - [x] **v0.3 – Tools**: built-in viewer (text / hex / image), file search, compare by content, synchronize directories, quick view panel
 - [x] **v0.4 – Archives & network**: browse ZIP / 7z / RAR / TAR like folders, pack / unpack, FTP / FTPS / SFTP client, checksums
-- [ ] **v1.0 – Polish**: settings dialog, themes (incl. dark), customizable shortcuts and button bar, installer
+- [x] **v1.0 – Polish**: settings dialog, light / dark themes, customizable shortcuts and button bar, installer
+
+Ideas for later: adding files to existing archives, creating 7z archives, asynchronous server listings,
+more languages for the interface, file associations and an Explorer context-menu entry.
 
 ## Building
 
@@ -124,7 +151,13 @@ The served folder needs a `pub` subfolder containing a `welcome.txt` file.
 Publish a single self-contained executable:
 
 ```bash
-dotnet publish src/ChickenCommander -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
+dotnet publish src/ChickenCommander -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+```
+
+Then build the installer with [Inno Setup 6](https://jrsoftware.org/isinfo.php) (the CI does both on every push):
+
+```bash
+ISCC.exe /DAppVersion=1.0.0 installer/ChickenCommander.iss
 ```
 
 ## Project structure
@@ -134,18 +167,22 @@ src/
   ChickenCommander.Core/   UI-independent logic (unit tested)
     FileSystem/            Directory listing, sorting, masks, paths, navigation history
     Operations/            Copy/move engine, multi-rename, attributes
-    Settings/              JSON settings store
+    Settings/              JSON settings store, shortcut map, button bar model
     Remote/                FTP / FTPS (FluentFTP) and SFTP (SSH.NET) clients, sessions, transfers
     Tools/                 File search, text diff, directory sync, checksums
     Viewer/                Encoding detection, line-indexed file reader, hex formatting
     Vfs/                   Virtual file system: local disk, archives (SharpCompress), servers
   ChickenCommander/        WPF app (MVVM with CommunityToolkit.Mvvm)
+    Commands/              Command registry (shortcuts, button bar icons) and key names
+    Themes/                Light / dark colour dictionaries and the theme switcher
     ViewModels/            Panel and main window state, commands
     Viewer/                Viewer control (text / hex / image) and Lister window
     Views/                 File panel control, dialogs, search / compare / sync windows
     Services/              Operation queue, Windows shell interop (icons, delete to Recycle Bin)
 tests/
   ChickenCommander.Core.Tests/
+installer/
+  ChickenCommander.iss     Inno Setup script (per-user or all-users install, desktop icon option)
 tools/
   make_icon.py             Generates the .ico / .png from the logo artwork
   test_servers.py          Local FTP + SFTP servers for the integration tests

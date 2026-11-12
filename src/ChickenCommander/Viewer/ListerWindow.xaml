@@ -4,7 +4,7 @@
         xmlns:viewer="clr-namespace:ChickenCommander.Viewer"
         Title="Lister" Width="1000" Height="700" MinWidth="500" MinHeight="300"
         WindowStartupLocation="CenterOwner" Icon="/Assets/chicken.ico"
-        Background="{StaticResource ChromeBrush}"
+        Background="{DynamicResource ChromeBrush}"
         PreviewKeyDown="Window_PreviewKeyDown">
     <DockPanel>
         <!-- Toolbar -->
@@ -33,11 +33,11 @@
 
         <!-- Status -->
         <DockPanel DockPanel.Dock="Bottom" Margin="6,2">
-            <TextBlock x:Name="PositionText" DockPanel.Dock="Right" Foreground="#5A6275" />
-            <TextBlock x:Name="InfoText" Foreground="#5A6275" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="PositionText" DockPanel.Dock="Right" Foreground="{DynamicResource TextMutedBrush}" />
+            <TextBlock x:Name="InfoText" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis" />
         </DockPanel>
 
-        <Border BorderBrush="#C9CFDB" BorderThickness="0,1">
+        <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1">
             <viewer:ViewerControl x:Name="Viewer" />
         </Border>
     </DockPanel>
