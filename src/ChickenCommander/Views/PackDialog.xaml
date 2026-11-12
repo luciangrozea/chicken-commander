@@ -1,0 +1,21 @@
+<Window x:Class="ChickenCommander.Views.PackDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Pack files" Width="520" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource ChromeBrush}">
+    <StackPanel Margin="14">
+        <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,0,0,6" />
+        <TextBox x:Name="PathBox" Padding="3" />
+        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <TextBlock Text="Format:" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <RadioButton x:Name="ZipBox" Content="_ZIP" IsChecked="True" Margin="0,0,14,0" Checked="Format_Checked" />
+            <RadioButton x:Name="TarBox" Content="_TAR" Margin="0,0,14,0" Checked="Format_Checked" />
+            <RadioButton x:Name="TgzBox" Content="TAR._GZ" Checked="Format_Checked" />
+        </StackPanel>
+        <TextBlock Text="7z and RAR archives can be opened and extracted, but not created." Foreground="#5A6275" FontSize="11" Margin="0,8,0,0" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="OK" Width="80" IsDefault="True" Click="Ok_Click" Margin="0,0,8,0" />
+            <Button Content="Cancel" Width="80" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

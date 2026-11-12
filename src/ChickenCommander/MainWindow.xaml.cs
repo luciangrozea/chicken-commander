@@ -7,7 +7,10 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using ChickenCommander.Core.FileSystem;
 using ChickenCommander.Core.Operations;
+using ChickenCommander.Core.Remote;
 using ChickenCommander.Core.Settings;
+using ChickenCommander.Core.Tools;
+using ChickenCommander.Core.Vfs;
 using ChickenCommander.Services;
 using ChickenCommander.Viewer;
 using ChickenCommander.ViewModels;
@@ -15,7 +18,7 @@ using ChickenCommander.Views;
 
 namespace ChickenCommander;
 
-public partial class MainWindow : Window, IDialogService
+public partial class MainWindow : Window, IDialogService, IRemoteTrust
 {
     private readonly MainViewModel vm;
     private readonly SettingsStore settingsStore = SettingsStore.Default;
@@ -161,6 +164,7 @@ public partial class MainWindow : Window, IDialogService
             Height = bounds.Height,
             Maximized = WindowState == WindowState.Maximized,
         };
+        vm.Cleanup();
         try { settingsStore.Save(settings); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* settings are a convenience; never block exit */ }
 
@@ -219,6 +223,10 @@ public partial class MainWindow : Window, IDialogService
             case (Key.I, ModifierKeys.Control): vm.ChangeAttributesCommand.Execute(null); return true;
             case (Key.O, CtrlShift): vm.ShowOperationsCommand.Execute(null); return true;
             case (Key.F7, ModifierKeys.Alt): vm.SearchCommand.Execute(null); return true;
+            case (Key.F5, ModifierKeys.Alt): vm.PackCommand.Execute(null); return true;
+            case (Key.F9, ModifierKeys.Alt): vm.UnpackCommand.Execute(null); return true;
+            case (Key.N, ModifierKeys.Control): vm.ConnectCommand.Execute(null); return true;
+            case (Key.N, CtrlShift): vm.DisconnectCommand.Execute(null); return true;
             case (Key.Q, ModifierKeys.Control): vm.ToggleQuickViewCommand.Execute(null); return true;
             case (Key.C, CtrlShift): vm.CompareFilesCommand.Execute(null); return true;
             case (Key.S, CtrlShift): vm.SyncDirectoriesCommand.Execute(null); return true;
@@ -255,6 +263,15 @@ public partial class MainWindow : Window, IDialogService
                 return true;
             case (Key.PageUp, ModifierKeys.Control):
                 panel.GoUp();
+                return true;
+            case (Key.Home, ModifierKeys.None):
+                ActivePanelView.MoveCursorToEdge(last: false);
+                return true;
+            case (Key.End, ModifierKeys.None):
+                ActivePanelView.MoveCursorToEdge(last: true);
+                return true;
+            case (Key.PageDown, ModifierKeys.Control): // open the archive (or folder) under the cursor
+                vm.OpenCurrent();
                 return true;
             case (Key.Oem5, ModifierKeys.Control): // Ctrl+\ : go to the drive root
                 panel.Navigate(Path.GetPathRoot(panel.CurrentPath)!);
@@ -458,6 +475,64 @@ public partial class MainWindow : Window, IDialogService
         menu.IsOpen = true;
         if (menu.Items.Count > 0 && menu.Items[0] is MenuItem first) first.Focus();
     }
+
+    public (string Path, PackFormat Format)? AskPack(string description, string defaultPath)
+    {
+        var dialog = new PackDialog(description, defaultPath) { Owner = this };
+        var ok = dialog.ShowDialog() == true;
+        ActivePanelView.FocusList();
+        return ok ? (dialog.ArchivePath, dialog.Format) : null;
+    }
+
+    public (RemoteConnection Connection, string? Password)? ShowConnections(List<RemoteConnection> connections)
+    {
+        var dialog = new ConnectionsWindow(connections) { Owner = this };
+        var ok = dialog.ShowDialog() == true && dialog.Chosen is not null;
+        ActivePanelView.FocusList();
+        return ok ? (dialog.Chosen!, dialog.TypedPassword) : null;
+    }
+
+    public string? AskPassword(string title, string message)
+    {
+        var dialog = new PasswordDialog(title, message) { Owner = this };
+        return dialog.ShowDialog() == true ? dialog.Password : null;
+    }
+
+    public (ChecksumKind Kind, bool OnePerFile)? AskChecksum(int fileCount)
+    {
+        var dialog = new ChecksumDialog(fileCount) { Owner = this };
+        var ok = dialog.ShowDialog() == true;
+        ActivePanelView.FocusList();
+        return ok ? (dialog.Kind, dialog.OnePerFile) : null;
+    }
+
+    public void ShowVerifyResults(string checksumFile, IReadOnlyList<VerifyResult> results) =>
+        new VerifyResultsWindow(checksumFile, results) { Owner = this }.ShowDialog();
+
+    public IRemoteTrust Trust => this;
+
+    // SSH.NET / FluentFTP raise these on their own threads; the question is asked on the UI thread.
+    bool IRemoteTrust.ConfirmHostKey(RemoteConnection connection, string fingerprint, bool changed) =>
+        OnUiThread(() =>
+        {
+            var message = changed
+                ? $"WARNING: the host key of {connection.Host} has CHANGED.\n\nThis can mean someone is intercepting the connection, or the server was reinstalled."
+                : $"First connection to {connection.Host}. Check that this is the server's key before trusting it.";
+            var dialog = new ChoiceDialog("Server key", message, fingerprint, ["Trust and connect", "Cancel"], defaultIndex: changed ? 1 : 0, cancelIndex: 1) { Owner = this };
+            dialog.ShowDialog();
+            return dialog.Choice == 0;
+        });
+
+    bool IRemoteTrust.ConfirmCertificate(RemoteConnection connection, string subject, string hash, string problem) =>
+        OnUiThread(() =>
+        {
+            var dialog = new ChoiceDialog("Certificate", $"The TLS certificate of {connection.Host} is not trusted by Windows ({problem}).",
+                $"{subject}\nSHA-1: {hash}", ["Accept for this server", "Cancel"], defaultIndex: 1, cancelIndex: 1) { Owner = this };
+            dialog.ShowDialog();
+            return dialog.Choice == 0;
+        });
+
+    private T OnUiThread<T>(Func<T> func) => Dispatcher.CheckAccess() ? func() : Dispatcher.Invoke(func);
 
     public void ShowLister(IReadOnlyList<string> files, int index)
     {

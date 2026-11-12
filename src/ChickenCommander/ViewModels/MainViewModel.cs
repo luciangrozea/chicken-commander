@@ -26,8 +26,8 @@ public partial class MainViewModel : ObservableObject
         Operations = operations;
         Operations.Completed += OnOperationCompleted;
 
-        Left = new FilePanelViewModel { ShowHidden = settings.ShowHidden };
-        Right = new FilePanelViewModel { ShowHidden = settings.ShowHidden };
+        Left = new FilePanelViewModel(Vfs) { ShowHidden = settings.ShowHidden };
+        Right = new FilePanelViewModel(Vfs) { ShowHidden = settings.ShowHidden };
         Left.ErrorOccurred += msg => dialogs.ShowError("Chicken Commander", msg);
         Right.ErrorOccurred += msg => dialogs.ShowError("Chicken Commander", msg);
 
@@ -88,10 +88,16 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>F3: built-in viewer over the marked files (or all files of the folder), starting at the cursor.</summary>
     [RelayCommand]
-    private void View()
+    private async Task View()
     {
         var current = ActivePanel.CurrentItem;
         if (current is null || current.Entry.IsDirectory) return;
+        if (!ActivePanel.IsLocal)
+        {
+            // Inside an archive or on a server: fetch a temporary copy first.
+            if (await MaterializeAsync(ActivePanel, current.Entry) is { } copy) dialogs.ShowLister([copy], 0);
+            return;
+        }
         var marked = ActivePanel.MarkedItems.Where(i => !i.Entry.IsDirectory).ToList();
         var files = (marked.Count > 1 ? marked : ActivePanel.Items.Where(i => !i.Entry.IsDirectory))
             .Select(i => i.Entry.FullPath).ToList();
@@ -103,7 +109,7 @@ public partial class MainViewModel : ObservableObject
     private void Edit()
     {
         var item = ActivePanel.CurrentItem;
-        if (item is null || item.Entry.IsDirectory) return;
+        if (item is null || item.Entry.IsDirectory || !RequireLocal("Edit")) return;
         ShellOpen("notepad.exe", Quote(item.Entry.FullPath));
     }
 
@@ -111,12 +117,20 @@ public partial class MainViewModel : ObservableObject
     private void ToggleQuickView() => IsQuickView = !IsQuickView;
 
     [RelayCommand]
-    private void Search() => dialogs.ShowSearch(ActivePanel.CurrentPath);
+    private void Search()
+    {
+        if (RequireLocal("Find files")) dialogs.ShowSearch(ActivePanel.CurrentPath);
+    }
 
     /// <summary>Compares two marked files in the active panel, or the files under both cursors.</summary>
     [RelayCommand]
     private void CompareFiles()
     {
+        if (!Left.IsLocal || !Right.IsLocal)
+        {
+            dialogs.ShowError("Compare by content", "Compare works with files on local or network drives. Copy the files out of the archive or server first.");
+            return;
+        }
         var marked = ActivePanel.MarkedItems.Where(i => !i.Entry.IsDirectory).ToList();
         string? left, right;
         if (marked.Count == 2)
@@ -140,6 +154,11 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void SyncDirectories()
     {
+        if (!Left.IsLocal || !Right.IsLocal)
+        {
+            dialogs.ShowError("Synchronize directories", "Both panels must show local or network folders.");
+            return;
+        }
         if (dialogs.ShowSync(Left.CurrentPath, Right.CurrentPath))
         {
             Left.Refresh();
@@ -165,17 +184,29 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void MakeDirectory()
     {
+        if (ActivePanel.Location == Core.Vfs.LocationKind.Archive)
+        {
+            dialogs.ShowError("Create folder", ArchiveReadOnlyMessage);
+            return;
+        }
         var name = dialogs.Prompt("Chicken Commander", "New folder (directory):", string.Empty);
         if (string.IsNullOrWhiteSpace(name)) return;
         try
         {
+            if (ActivePanel.Location == Core.Vfs.LocationKind.Remote)
+            {
+                var (session, remoteDir) = Vfs.Remote.Resolve(ActivePanel.CurrentPath);
+                session.Use(c => c.CreateDirectory(Core.Remote.RemotePath.Combine(remoteDir, name.Trim().Replace('\\', '/'))));
+                ActivePanel.Navigate(ActivePanel.CurrentPath, name.Trim().Split('\\', '/')[0], recordHistory: false);
+                return;
+            }
             Directory.CreateDirectory(Path.Combine(ActivePanel.CurrentPath, name.Trim()));
             // "a\b\c" creates nested folders; put the cursor on the first level.
             var firstLevel = name.Trim().Split('\\', '/')[0];
             ActivePanel.Navigate(ActivePanel.CurrentPath, firstLevel, recordHistory: false);
             RefreshInactiveIfSameDirectory();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             dialogs.ShowError("Create folder", ex.Message);
         }
@@ -192,8 +223,27 @@ public partial class MainViewModel : ObservableObject
     {
         var item = ActivePanel.CurrentItem;
         if (item is null || item.IsParentLink) return;
+        if (ActivePanel.Location == Core.Vfs.LocationKind.Archive)
+        {
+            dialogs.ShowError("Rename", ArchiveReadOnlyMessage);
+            return;
+        }
         var newName = dialogs.Prompt("Rename", $"Rename \"{item.Entry.Name}\" to:", item.Entry.Name, selectNameOnly: true);
         if (string.IsNullOrWhiteSpace(newName) || newName == item.Entry.Name) return;
+        if (ActivePanel.Location == Core.Vfs.LocationKind.Remote)
+        {
+            try
+            {
+                var (session, remoteDir) = Vfs.Remote.Resolve(ActivePanel.CurrentPath);
+                session.Use(c => c.Rename(Core.Remote.RemotePath.Combine(remoteDir, item.Entry.Name), Core.Remote.RemotePath.Combine(remoteDir, newName.Trim())));
+                ActivePanel.Navigate(ActivePanel.CurrentPath, newName.Trim(), recordHistory: false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                dialogs.ShowError("Rename", ex.Message);
+            }
+            return;
+        }
         var target = Path.Combine(ActivePanel.CurrentPath, newName.Trim());
         if (ShellFileOperation.Rename(dialogs.OwnerHandle, item.Entry.FullPath, target))
         {
@@ -212,7 +262,7 @@ public partial class MainViewModel : ObservableObject
     private void MultiRename()
     {
         var items = ActivePanel.SelectionOrCurrent();
-        if (items.Count == 0) return;
+        if (items.Count == 0 || !RequireLocal("Multi-Rename")) return;
         var sources = items.Select(i => new RenameSource(i.Entry.FullPath, i.Entry.IsDirectory, i.Entry.Modified)).ToList();
         if (dialogs.ShowMultiRename(sources))
         {
@@ -227,7 +277,7 @@ public partial class MainViewModel : ObservableObject
     private void ChangeAttributes()
     {
         var items = ActivePanel.SelectionOrCurrent();
-        if (items.Count == 0) return;
+        if (items.Count == 0 || !RequireLocal("Change attributes")) return;
         if (dialogs.ShowAttributes(items.Select(i => i.Entry).ToList()))
         {
             ActivePanel.Refresh();
@@ -387,33 +437,42 @@ public partial class MainViewModel : ObservableObject
         {
             var arg = text[2..].Trim();
             if (arg.Length == 0) arg = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            ActivePanel.Navigate(PathHelper.Resolve(ActivePanel.CurrentPath, arg));
+            NavigateActive(arg);
             return;
         }
 
         var (file, args) = SplitCommand(text);
         try
         {
-            Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = true, WorkingDirectory = ActivePanel.CurrentPath });
+            Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = true, WorkingDirectory = WorkingDirectory });
         }
         catch (Exception)
         {
             // Not a program or document: let cmd.exe handle built-ins like "dir" or pipes.
-            Process.Start(new ProcessStartInfo("cmd.exe", "/k " + text) { UseShellExecute = true, WorkingDirectory = ActivePanel.CurrentPath });
+            Process.Start(new ProcessStartInfo("cmd.exe", "/k " + text) { UseShellExecute = true, WorkingDirectory = WorkingDirectory });
         }
     }
 
     public void NavigateActive(string input)
     {
-        ActivePanel.Navigate(PathHelper.Resolve(ActivePanel.CurrentPath, input));
+        var text = input.Trim().Trim('"');
+        // Server paths and paths typed while inside an archive/server are taken as they are.
+        if (text.Contains("://", StringComparison.Ordinal)) ActivePanel.Navigate(text);
+        else if (!ActivePanel.IsLocal && !Path.IsPathRooted(text)) ActivePanel.Navigate(Vfs.For(ActivePanel.CurrentPath).Combine(ActivePanel.CurrentPath, text));
+        else ActivePanel.Navigate(PathHelper.Resolve(ActivePanel.IsLocal ? ActivePanel.CurrentPath : WorkingDirectory, text));
     }
 
-    /// <summary>Enter on an item: enter folders, launch files with their associated program.</summary>
-    public void OpenCurrent()
+    /// <summary>Enter on an item: enter folders and archives, launch files with their associated program.</summary>
+    public async void OpenCurrent()
     {
         var item = ActivePanel.CurrentItem;
         if (item is null || ActivePanel.TryEnter(item)) return;
-        ShellOpen(item.Entry.FullPath, null);
+        if (ActivePanel.IsLocal)
+        {
+            ShellOpen(item.Entry.FullPath, null);
+            return;
+        }
+        if (await MaterializeAsync(ActivePanel, item.Entry) is { } copy) ShellOpen(copy, null);
     }
 
     [RelayCommand]
@@ -425,7 +484,7 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            Process.Start(new ProcessStartInfo(file, args ?? string.Empty) { UseShellExecute = true, WorkingDirectory = ActivePanel.CurrentPath });
+            Process.Start(new ProcessStartInfo(file, args ?? string.Empty) { UseShellExecute = true, WorkingDirectory = WorkingDirectory });
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -433,24 +492,94 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// F5 / F6. The pair of locations picks the engine: local↔local copy, archive→local extract,
+    /// server→local download, local→server upload. Other pairs are explained instead of half-supported.
+    /// </summary>
     private void Transfer(TransferKind kind)
     {
         var items = ActivePanel.SelectionOrCurrent();
         if (items.Count == 0) return;
+        var from = ActivePanel.Location;
+        var targetPanel = InactivePanel;
+        var to = targetPanel.Location;
+
+        if (from == Core.Vfs.LocationKind.Archive && kind == TransferKind.Move)
+        {
+            dialogs.ShowError("Move", ArchiveReadOnlyMessage + " Use F5 to extract a copy.");
+            return;
+        }
+        if (to == Core.Vfs.LocationKind.Archive)
+        {
+            dialogs.ShowError(kind == TransferKind.Copy ? "Copy" : "Move", "Archives are read-only here. To create an archive, mark the files and press Alt+F5 (Pack).");
+            return;
+        }
+        if (from != Core.Vfs.LocationKind.Local && to != Core.Vfs.LocationKind.Local)
+        {
+            dialogs.ShowError("Copy", "Copy between an archive or server and another archive or server is not supported. Copy to a local folder first.");
+            return;
+        }
 
         var what = items.Count == 1 ? $"\"{items[0].Entry.Name}\"" : $"{items.Count} file(s)/dir(s)";
-        var initial = InactivePanel.CurrentPath;
-        if (!initial.EndsWith('\\')) initial += "\\";
+        var initial = targetPanel.CurrentPath;
+        if (to == Core.Vfs.LocationKind.Local && !initial.EndsWith('\\')) initial += "\\";
+        if (to == Core.Vfs.LocationKind.Remote && !initial.EndsWith('/')) initial += "/";
         if (dialogs.AskTransfer(kind, what, initial) is not { } answer || string.IsNullOrWhiteSpace(answer.Target)) return;
 
+        var sources = items.Select(i => i.Entry.FullPath).ToList();
         var target = answer.Target.Trim();
-        var keepSeparator = target.EndsWith('\\') || target.EndsWith('/');
-        target = PathHelper.Resolve(ActivePanel.CurrentPath, target);
-        if (keepSeparator && !target.EndsWith('\\')) target += "\\";
-
-        var request = new TransferRequest(kind, items.Select(i => i.Entry.FullPath).ToList(), target, answer.Mode);
         foreach (var i in items) i.IsMarked = false;
-        Operations.Enqueue(new TransferOperationViewModel(request, dialogs));
+        var verb = kind == TransferKind.Copy ? "Copy" : "Move";
+
+        try
+        {
+            switch (from, to)
+            {
+                case (Core.Vfs.LocationKind.Local, Core.Vfs.LocationKind.Local):
+                {
+                    var keepSeparator = target.EndsWith('\\') || target.EndsWith('/');
+                    target = PathHelper.Resolve(ActivePanel.CurrentPath, target);
+                    if (keepSeparator && !target.EndsWith('\\')) target += "\\";
+                    Operations.Enqueue(new TransferOperationViewModel(new TransferRequest(kind, sources, target, answer.Mode), dialogs));
+                    break;
+                }
+                case (Core.Vfs.LocationKind.Archive, Core.Vfs.LocationKind.Local):
+                {
+                    Core.Vfs.ArchiveProvider.TrySplit(ActivePanel.CurrentPath, out var archive, out _);
+                    var inner = sources.Select(s => s[(archive.Length + 1)..]).ToList();
+                    var dest = PathHelper.Resolve(WorkingDirectory, target);
+                    var mode = answer.Mode;
+                    Operations.Enqueue(new TransferOperationViewModel(TransferOperationViewModel.Describe("Extract", sources, dest), dialogs,
+                        (cb, pause, ct) => Core.Vfs.ArchiveTools.ExtractAsync(archive, inner, dest, Vfs.Archives.GetIndex(archive, ct), cb, mode, pause, ct)));
+                    break;
+                }
+                case (Core.Vfs.LocationKind.Remote, Core.Vfs.LocationKind.Local):
+                {
+                    var (session, _) = Vfs.Remote.Resolve(ActivePanel.CurrentPath);
+                    var remote = sources.Select(s => Vfs.Remote.Resolve(s).RemotePath).ToList();
+                    var dest = PathHelper.Resolve(WorkingDirectory, target);
+                    var mode = answer.Mode;
+                    var move = kind == TransferKind.Move;
+                    Operations.Enqueue(new TransferOperationViewModel(TransferOperationViewModel.Describe(move ? "Download (move)" : "Download", sources, dest), dialogs,
+                        (cb, pause, ct) => Core.Remote.RemoteTransfer.DownloadAsync(session, remote, dest, cb, mode, move, pause, ct)));
+                    break;
+                }
+                case (Core.Vfs.LocationKind.Local, Core.Vfs.LocationKind.Remote):
+                {
+                    var targetPath = target.Contains("://", StringComparison.Ordinal) ? target : Vfs.Remote.Combine(targetPanel.CurrentPath, target);
+                    var (session, remoteDir) = Vfs.Remote.Resolve(targetPath);
+                    var mode = answer.Mode;
+                    var move = kind == TransferKind.Move;
+                    Operations.Enqueue(new TransferOperationViewModel(TransferOperationViewModel.Describe(move ? "Upload (move)" : "Upload", sources, targetPath), dialogs,
+                        (cb, pause, ct) => Core.Remote.RemoteTransfer.UploadAsync(session, sources, remoteDir, cb, mode, move, pause, ct)));
+                    break;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException)
+        {
+            dialogs.ShowError(verb, ex.Message);
+        }
         ActivePanel.RequestFocus();
     }
 
@@ -465,8 +594,16 @@ public partial class MainViewModel : ObservableObject
     {
         var items = ActivePanel.SelectionOrCurrent();
         if (items.Count == 0) return;
+        if (ActivePanel.Location == Core.Vfs.LocationKind.Archive)
+        {
+            dialogs.ShowError("Delete", ArchiveReadOnlyMessage);
+            return;
+        }
+        var remote = ActivePanel.Location == Core.Vfs.LocationKind.Remote;
         var what = items.Count == 1 ? $"\"{items[0].Entry.Name}\"" : $"{items.Count} file(s)/dir(s)";
-        var question = toRecycleBin ? $"Delete {what} to the Recycle Bin?" : $"Permanently delete {what}?\nThis cannot be undone.";
+        var question = remote
+            ? $"Delete {what} from the server?\nThis cannot be undone."
+            : toRecycleBin ? $"Delete {what} to the Recycle Bin?" : $"Permanently delete {what}?\nThis cannot be undone.";
         if (!dialogs.Confirm("Delete", question)) return;
 
         // Keep the cursor near where it was: on the first remaining item after the deleted block.
@@ -476,7 +613,30 @@ public partial class MainViewModel : ObservableObject
         var next = all.Skip(lastIndex + 1).FirstOrDefault(i => !deleted.Contains(i))
                    ?? all.Take(lastIndex).LastOrDefault(i => !deleted.Contains(i));
 
-        ShellFileOperation.Delete(dialogs.OwnerHandle, items.Select(i => i.Entry.FullPath), toRecycleBin);
+        if (remote)
+        {
+            try
+            {
+                var (session, _) = Vfs.Remote.Resolve(ActivePanel.CurrentPath);
+                session.Use(c =>
+                {
+                    foreach (var i in items)
+                    {
+                        var p = Vfs.Remote.Resolve(i.Entry.FullPath).RemotePath;
+                        if (i.Entry.IsDirectory) c.DeleteDirectory(p);
+                        else c.DeleteFile(p);
+                    }
+                });
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                dialogs.ShowError("Delete", ex.Message);
+            }
+        }
+        else
+        {
+            ShellFileOperation.Delete(dialogs.OwnerHandle, items.Select(i => i.Entry.FullPath), toRecycleBin);
+        }
         ActivePanel.Navigate(ActivePanel.CurrentPath, next?.Entry.Name, recordHistory: false);
         RefreshInactiveIfSameDirectory();
     }

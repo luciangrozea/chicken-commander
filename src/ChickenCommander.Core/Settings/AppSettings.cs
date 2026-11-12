@@ -28,6 +28,7 @@ public sealed class AppSettings
     public bool LeftIsActive { get; set; } = true;
     public bool ShowHidden { get; set; }
     public List<HotlistEntry> Hotlist { get; set; } = [];
+    public List<Remote.RemoteConnection> Connections { get; set; } = [];
     public WindowSettings Window { get; set; } = new();
 }
 

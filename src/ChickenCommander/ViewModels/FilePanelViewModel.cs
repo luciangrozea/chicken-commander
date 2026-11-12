@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using ChickenCommander.Core.FileSystem;
+using ChickenCommander.Core.Remote;
 using ChickenCommander.Core.Settings;
+using ChickenCommander.Core.Vfs;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ChickenCommander.ViewModels;
@@ -21,10 +23,18 @@ public partial class FilePanelViewModel : ObservableObject
     [ObservableProperty] private string freeSpaceText = string.Empty;
     [ObservableProperty] private PanelTab? activeTab;
 
-    public FilePanelViewModel()
+    private readonly VirtualFileSystem vfs;
+
+    public FilePanelViewModel(VirtualFileSystem vfs)
     {
+        this.vfs = vfs;
         RefreshDrives();
     }
+
+    /// <summary>Local disk, inside an archive, or on a server: decides which operations are possible.</summary>
+    public LocationKind Location { get; private set; }
+
+    public bool IsLocal => Location == LocationKind.Local;
 
     public ObservableCollection<PanelTab> Tabs { get; } = [];
 
@@ -62,7 +72,9 @@ public partial class FilePanelViewModel : ObservableObject
     public void Restore(PanelSettings settings, string fallback)
     {
         Tabs.Clear();
-        foreach (var path in settings.Tabs.Where(Directory.Exists)) Tabs.Add(new PanelTab(path));
+        // Server tabs are not restored (the connection is closed); archive tabs are, if the archive still exists.
+        foreach (var path in settings.Tabs.Where(t => !t.Contains("://", StringComparison.Ordinal) && vfs.DirectoryExists(t)))
+            Tabs.Add(new PanelTab(path));
         if (Tabs.Count == 0) Tabs.Add(new PanelTab(fallback));
         var active = Tabs[Math.Clamp(settings.ActiveTab, 0, Tabs.Count - 1)];
         switchingTab = true;
@@ -83,17 +95,19 @@ public partial class FilePanelViewModel : ObservableObject
     public bool Navigate(string path, string? selectName = null, IReadOnlySet<string>? keepMarked = null, bool recordHistory = true)
     {
         IReadOnlyList<FileEntry> entries;
+        string full;
         try
         {
-            entries = DirectoryReader.Read(path, Sort, ShowHidden);
+            full = vfs.Normalize(path);
+            entries = vfs.Read(full, Sort, ShowHidden);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException))
         {
+            // Disk errors, broken archives, password-protected archives, dropped connections…
             ErrorOccurred?.Invoke(ex.Message);
             return false;
         }
-
-        var full = Path.GetFullPath(path);
+        Location = vfs.KindOf(full);
         var list = entries.Select(e => new FileItemViewModel(e)).ToList();
         if (keepMarked is { Count: > 0 })
         {
@@ -121,12 +135,23 @@ public partial class FilePanelViewModel : ObservableObject
         CurrentItem = (selectName is null ? null : list.FirstOrDefault(i => string.Equals(i.Entry.Name, selectName, StringComparison.OrdinalIgnoreCase)))
                       ?? list.FirstOrDefault();
 
-        var root = Path.GetPathRoot(full) ?? full;
-        lastPathPerDrive[root] = full;
         syncingDrive = true;
-        SelectedDrive = Drives.FirstOrDefault(d => string.Equals(d.Root, root, StringComparison.OrdinalIgnoreCase));
+        if (Location == LocationKind.Remote)
+        {
+            SelectedDrive = null;
+            RemotePath.TryParsePanelPath(full, out var scheme, out var name, out _);
+            FreeSpaceText = vfs.Sessions.Find(name) is { } s
+                ? $"{scheme.ToUpperInvariant()}  {s.Connection.User}@{s.Connection.Host}:{s.Connection.EffectivePort}"
+                : name;
+        }
+        else
+        {
+            var root = Path.GetPathRoot(full) ?? full;
+            if (Location == LocationKind.Local) lastPathPerDrive[root] = full;
+            SelectedDrive = Drives.FirstOrDefault(d => string.Equals(d.Root, root, StringComparison.OrdinalIgnoreCase));
+            FreeSpaceText = (SelectedDrive?.FreeSpaceText() ?? string.Empty) + (Location == LocationKind.Archive ? "   ·  inside archive (read-only)" : "");
+        }
         syncingDrive = false;
-        FreeSpaceText = SelectedDrive?.FreeSpaceText() ?? string.Empty;
 
         UpdateStatus();
         FocusRequested?.Invoke(CurrentItem);
@@ -138,12 +163,12 @@ public partial class FilePanelViewModel : ObservableObject
     {
         var marked = MarkedItems.Select(i => i.Entry.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var name = CurrentItem?.Entry.Name;
-        if (!Directory.Exists(CurrentPath))
+        if (!vfs.DirectoryExists(CurrentPath))
         {
-            // Directory vanished (deleted elsewhere, drive removed): walk up until something exists.
+            // Directory vanished (deleted elsewhere, drive removed, connection closed): walk up until something exists.
             var dir = CurrentPath;
-            while (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) dir = Path.GetDirectoryName(dir);
-            Navigate(dir ?? Path.GetPathRoot(Environment.SystemDirectory)!);
+            while (!string.IsNullOrEmpty(dir) && !vfs.DirectoryExists(dir)) dir = vfs.GetParent(dir);
+            Navigate(dir ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
             return;
         }
         Navigate(CurrentPath, name, marked, recordHistory: false);
@@ -151,9 +176,10 @@ public partial class FilePanelViewModel : ObservableObject
 
     public void GoUp()
     {
-        var parent = Directory.GetParent(CurrentPath);
+        var parent = vfs.GetParent(CurrentPath);
         if (parent is null) return;
-        Navigate(parent.FullName, Path.GetFileName(CurrentPath.TrimEnd('\\')));
+        var trimmed = CurrentPath.TrimEnd('\\', '/');
+        Navigate(parent, trimmed[(trimmed.LastIndexOfAny(['\\', '/']) + 1)..]);
     }
 
     public void GoBack()
@@ -174,7 +200,13 @@ public partial class FilePanelViewModel : ObservableObject
             GoUp();
             return true;
         }
-        if (!item.Entry.IsDirectory) return false;
+        if (!item.Entry.IsDirectory)
+        {
+            // Enter on an archive opens it like a folder.
+            if (Location == LocationKind.Local && ArchiveProvider.IsArchiveFile(item.Entry.FullPath))
+                return Navigate(item.Entry.FullPath);
+            return false;
+        }
         Navigate(item.Entry.FullPath);
         return true;
     }
@@ -223,7 +255,7 @@ public partial class FilePanelViewModel : ObservableObject
             {
                 // Folder of that tab is gone: fall back to its nearest existing parent.
                 var dir = newValue.Path;
-                while (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) dir = Path.GetDirectoryName(dir);
+                while (!string.IsNullOrEmpty(dir) && !vfs.DirectoryExists(dir)) dir = vfs.GetParent(dir);
                 if (dir is not null) Navigate(dir);
             }
         }
@@ -260,13 +292,14 @@ public partial class FilePanelViewModel : ObservableObject
     partial void OnSelectedDriveChanged(DriveItem? value)
     {
         if (syncingDrive || value is null) return;
-        if (string.Equals(Path.GetPathRoot(CurrentPath), value.Root, StringComparison.OrdinalIgnoreCase)) return;
+        if (Location != LocationKind.Remote && string.Equals(Path.GetPathRoot(CurrentPath), value.Root, StringComparison.OrdinalIgnoreCase)) return;
         var target = lastPathPerDrive.TryGetValue(value.Root, out var last) && Directory.Exists(last) ? last : value.Root;
         if (!Navigate(target))
         {
             // Drive not ready (empty card reader, disconnected share): put the combo back.
             syncingDrive = true;
-            SelectedDrive = Drives.FirstOrDefault(d => string.Equals(d.Root, Path.GetPathRoot(CurrentPath), StringComparison.OrdinalIgnoreCase));
+            SelectedDrive = Location == LocationKind.Remote ? null
+                : Drives.FirstOrDefault(d => string.Equals(d.Root, Path.GetPathRoot(CurrentPath), StringComparison.OrdinalIgnoreCase));
             syncingDrive = false;
         }
     }

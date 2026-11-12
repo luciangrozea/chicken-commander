@@ -21,7 +21,8 @@ public static class ShellIcons
         if (entry.IsDirectory)
             return Cache.GetOrAdd("<dir>", _ => Load("folder", FileAttributeDirectory, useAttributes: true));
 
-        if (PerFileIcon.Contains(entry.Extension))
+        // Files inside archives or on servers have no local path to read an icon from: use the type's icon.
+        if (PerFileIcon.Contains(entry.Extension) && !entry.FullPath.Contains("://", StringComparison.Ordinal) && File.Exists(entry.FullPath))
             return Cache.GetOrAdd(entry.FullPath, p => Load(p, FileAttributeNormal, useAttributes: false));
 
         var key = "." + entry.Extension;

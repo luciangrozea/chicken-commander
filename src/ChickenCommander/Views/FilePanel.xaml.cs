@@ -40,6 +40,15 @@ public partial class FilePanel : UserControl
         PathBox.SelectAll();
     }
 
+    /// <summary>Home / End: first or last row (the DataGrid's own Home/End only move between columns).</summary>
+    public void MoveCursorToEdge(bool last)
+    {
+        var vm = ViewModel;
+        if (vm is null || vm.Items.Count == 0) return;
+        vm.CurrentItem = last ? vm.Items[^1] : vm.Items[0];
+        FocusItem(vm.CurrentItem);
+    }
+
     /// <summary>Moves the cursor by <paramref name="delta"/> rows (used after Insert marks an item).</summary>
     public void MoveCursor(int delta)
     {

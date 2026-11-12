@@ -25,15 +25,37 @@ public partial class TransferOperationViewModel : ObservableObject, ITransferCal
     [ObservableProperty] private double totalPercent;
     [ObservableProperty] private string detailText = "Waiting…";
 
+    private readonly Func<ITransferCallbacks, PauseController, CancellationToken, Task<TransferResult>> work;
+
+    /// <summary>A local copy/move.</summary>
     public TransferOperationViewModel(TransferRequest request, IDialogService dialogs)
+        : this(Describe(request.Kind == TransferKind.Copy ? "Copy" : "Move", request.Sources, request.Target), dialogs,
+            (cb, pause, ct) => FileTransfer.RunAsync(request, cb, pause, ct))
     {
-        Request = request;
-        this.dialogs = dialogs;
-        var what = request.Sources.Count == 1 ? Path.GetFileName(request.Sources[0].TrimEnd('\\')) : $"{request.Sources.Count} items";
-        Title = $"{(request.Kind == TransferKind.Copy ? "Copy" : "Move")} {what} → {request.Target}";
     }
 
-    public TransferRequest Request { get; }
+    /// <summary>Any job that reports through <see cref="ITransferCallbacks"/>: extract, pack, download, upload…</summary>
+    public TransferOperationViewModel(string title, IDialogService dialogs,
+        Func<ITransferCallbacks, PauseController, CancellationToken, Task<TransferResult>> work)
+    {
+        Title = title;
+        this.dialogs = dialogs;
+        this.work = work;
+    }
+
+    public static string Describe(string verb, IReadOnlyList<string> sources, string target)
+    {
+        var what = sources.Count == 1 ? LastSegment(sources[0]) : $"{sources.Count} items";
+        return $"{verb} {what} → {target}";
+    }
+
+    private static string LastSegment(string path)
+    {
+        var p = path.TrimEnd('\\', '/');
+        var i = p.LastIndexOfAny(['\\', '/']);
+        return i < 0 ? p : p[(i + 1)..];
+    }
+
     public string Title { get; }
     public TransferResult? Result { get; private set; }
 
@@ -45,7 +67,7 @@ public partial class TransferOperationViewModel : ObservableObject, ITransferCal
         clock.Start();
         try
         {
-            Result = await Task.Run(() => FileTransfer.RunAsync(Request, this, pause, cts.Token));
+            Result = await Task.Run(() => work(this, pause, cts.Token));
             State = Result.Cancelled ? OperationState.Cancelled : OperationState.Done;
             RefreshProgress();
             DetailText = Result.Cancelled

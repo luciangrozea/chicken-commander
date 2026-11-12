@@ -23,6 +23,11 @@
                 <MenuItem Header="_Delete" InputGestureText="F8 / Del" Command="{Binding DeleteCommand}" />
                 <MenuItem Header="Delete _permanently" InputGestureText="Shift+Del" Command="{Binding DeletePermanentlyCommand}" />
                 <Separator />
+                <MenuItem Header="_Pack..." InputGestureText="Alt+F5" Command="{Binding PackCommand}" />
+                <MenuItem Header="_Unpack..." InputGestureText="Alt+F9" Command="{Binding UnpackCommand}" />
+                <MenuItem Header="Create chec_ksums..." Command="{Binding CreateChecksumsCommand}" />
+                <MenuItem Header="_Verify checksums" Command="{Binding VerifyChecksumsCommand}" />
+                <Separator />
                 <MenuItem Header="Compare by con_tent..." InputGestureText="Ctrl+Shift+C" Command="{Binding CompareFilesCommand}" />
                 <MenuItem Header="_Multi-Rename tool..." InputGestureText="Ctrl+M" Command="{Binding MultiRenameCommand}" />
                 <MenuItem Header="Change _attributes..." InputGestureText="Ctrl+I" Command="{Binding ChangeAttributesCommand}" />
@@ -51,6 +56,10 @@
                 <MenuItem Header="_Target = Source" InputGestureText="Ctrl+E" Command="{Binding TargetEqualsSourceCommand}" />
                 <MenuItem Header="Command _prompt here" Click="OpenCmd_Click" />
                 <MenuItem Header="Open in _Explorer" Click="OpenExplorer_Click" />
+            </MenuItem>
+            <MenuItem Header="_Net">
+                <MenuItem Header="_Connect to server (FTP / SFTP)..." InputGestureText="Ctrl+N" Command="{Binding ConnectCommand}" />
+                <MenuItem Header="_Disconnect" InputGestureText="Ctrl+Shift+N" Command="{Binding DisconnectCommand}" />
             </MenuItem>
             <MenuItem Header="_Tabs">
                 <MenuItem Header="_New tab" InputGestureText="Ctrl+T" Command="{Binding NewTabCommand}" />

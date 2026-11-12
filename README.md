@@ -50,6 +50,13 @@
 - **Compare by content**: side-by-side line diff (Myers algorithm) with ignore case / whitespace and jump between differences; binary files report the first differing byte
 - **Synchronize directories**: compare two trees by date, size or content, review and change each action (→ / ← / skip), then copy
 
+**Archives & network**
+- **Archives as folders**: press `Enter` on a ZIP, 7z, RAR, TAR, TAR.GZ / TGZ, BZ2 or XZ file to browse it; `F5` extracts the selection, `F3` views a file inside; `..` goes back out
+- **Pack** (`Alt+F5`) into ZIP, TAR or TAR.GZ and **unpack** (`Alt+F9`) whole archives, both in the background queue; protected against “zip slip” paths
+- **FTP, FTPS and SFTP client** (`Ctrl+N`): saved connections, password or private-key login, browse servers in a panel, `F5` / `F6` to download or upload (folders too), `F7` / `F8` / `Shift+F6` on the server
+- Secure by default: SSH host keys are confirmed on first use and checked afterwards; untrusted TLS certificates need an explicit OK; saved passwords are encrypted with Windows DPAPI
+- **Checksums**: create MD5 / SHA-1 / SHA-256 / SHA-512 / CRC32 (SFV) files and verify them (GNU, BSD and SFV formats)
+
 **Marking & command line**
 - Insert / Space, mark by mask (`*.txt;*.md | *.bak`), invert, select all
 - Built-in command line: start typing anywhere and press Enter; `cd` navigates the active panel
@@ -76,7 +83,9 @@
 | `Alt+Left` / `Alt+Right` | Back / forward | `Alt+Down` | Folder history |
 | `Ctrl+Shift+O` | File operations window | `Ctrl+Q` | Quick View panel |
 | `Alt+F7` | Find files | `Ctrl+Shift+C` | Compare by content |
-| `Ctrl+Shift+S` | Synchronize directories | | |
+| `Ctrl+Shift+S` | Synchronize directories | `Home` / `End` | First / last item |
+| `Alt+F5` | Pack | `Alt+F9` | Unpack |
+| `Ctrl+PgDn` | Open archive | `Ctrl+N` / `Ctrl+Shift+N` | Connect / disconnect server |
 
 In the viewer: `1` / `2` / `3` text / hex / image, `W` wrap, `Ctrl+F` find, `F3` find next, `N` / `P` next / previous file, `Esc` close.
 
@@ -85,7 +94,7 @@ In the viewer: `1` / `2` / `3` text / hex / image, `W` wrap, `Ctrl+F` find, `F3`
 - [x] **v0.1 – Core**: dual panels, navigation, marking, shell file operations, command line
 - [x] **v0.2 – Operations**: own copy/move engine with background queue and progress, multi-rename tool, folder tabs, directory history and hotlist, file attributes dialog, saved settings
 - [x] **v0.3 – Tools**: built-in viewer (text / hex / image), file search, compare by content, synchronize directories, quick view panel
-- [ ] **v0.4 – Archives & network**: browse ZIP / 7z / TAR like folders, pack / unpack, FTP / SFTP client, checksums
+- [x] **v0.4 – Archives & network**: browse ZIP / 7z / RAR / TAR like folders, pack / unpack, FTP / FTPS / SFTP client, checksums
 - [ ] **v1.0 – Polish**: settings dialog, themes (incl. dark), customizable shortcuts and button bar, installer
 
 ## Building
@@ -97,6 +106,20 @@ dotnet build
 dotnet test
 dotnet run --project src/ChickenCommander
 ```
+
+The FTP / SFTP integration tests talk to real servers and are skipped unless enabled. To run them, start the
+local test servers (FTP on port 2121, SFTP on 2222, test user `demo` / `demo`, localhost only) and set the variable:
+
+```bash
+pip install pyftpdlib asyncssh
+python tools/test_servers.py demo/Server
+```
+
+```bash
+CC_TEST_SERVERS=1 dotnet test
+```
+
+The served folder needs a `pub` subfolder containing a `welcome.txt` file.
 
 Publish a single self-contained executable:
 
@@ -112,8 +135,10 @@ src/
     FileSystem/            Directory listing, sorting, masks, paths, navigation history
     Operations/            Copy/move engine, multi-rename, attributes
     Settings/              JSON settings store
-    Tools/                 File search, text diff, directory sync
+    Remote/                FTP / FTPS (FluentFTP) and SFTP (SSH.NET) clients, sessions, transfers
+    Tools/                 File search, text diff, directory sync, checksums
     Viewer/                Encoding detection, line-indexed file reader, hex formatting
+    Vfs/                   Virtual file system: local disk, archives (SharpCompress), servers
   ChickenCommander/        WPF app (MVVM with CommunityToolkit.Mvvm)
     ViewModels/            Panel and main window state, commands
     Viewer/                Viewer control (text / hex / image) and Lister window
@@ -123,6 +148,7 @@ tests/
   ChickenCommander.Core.Tests/
 tools/
   make_icon.py             Generates the .ico / .png from the logo artwork
+  test_servers.py          Local FTP + SFTP servers for the integration tests
 ```
 
 ## Disclaimer
