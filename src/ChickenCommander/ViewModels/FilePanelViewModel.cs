@@ -238,6 +238,14 @@ public partial class FilePanelViewModel : ObservableObject
         if (wasActive) ActiveTab = Tabs[Math.Min(index, Tabs.Count - 1)];
     }
 
+    /// <summary>Closes every tab except <paramref name="keep"/>, which becomes the active one.</summary>
+    public void CloseOtherTabs(PanelTab keep)
+    {
+        if (!Tabs.Contains(keep)) return;
+        ActiveTab = keep;
+        foreach (var tab in Tabs.Where(t => t != keep).ToList()) Tabs.Remove(tab);
+    }
+
     public void CycleTab(int delta)
     {
         if (Tabs.Count <= 1 || ActiveTab is null) return;

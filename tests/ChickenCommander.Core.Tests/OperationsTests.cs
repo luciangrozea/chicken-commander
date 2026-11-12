@@ -86,6 +86,34 @@ public class FileTransferTests : TempFolderTest
     }
 
     [Fact]
+    public async Task Move_to_same_name_in_other_case_renames_file()
+    {
+        Write("readme.txt", "data");
+        var result = await FileTransfer.RunAsync(new TransferRequest(TransferKind.Move, [P("readme.txt")], P("README.txt")), new ScriptedCallbacks());
+        Assert.Equal(1, result.FilesDone);
+        Assert.Equal(["README.txt"], Directory.GetFiles(Root).Select(Path.GetFileName));
+        Assert.Equal("data", File.ReadAllText(P("README.txt")));
+    }
+
+    [Fact]
+    public async Task Move_to_same_name_in_other_case_renames_folder()
+    {
+        Write(@"photos\a.jpg");
+        await FileTransfer.RunAsync(new TransferRequest(TransferKind.Move, [P("photos")], P("Photos")), new ScriptedCallbacks());
+        Assert.Equal(["Photos"], Directory.GetDirectories(Root).Select(Path.GetFileName));
+        Assert.True(File.Exists(P("Photos", "a.jpg")));
+    }
+
+    [Fact]
+    public async Task Move_onto_itself_is_skipped()
+    {
+        Write("a.txt", "data");
+        var result = await FileTransfer.RunAsync(new TransferRequest(TransferKind.Move, [P("a.txt")], Root + "\\"), new ScriptedCallbacks());
+        Assert.Equal(1, result.Skipped);
+        Assert.Equal("data", File.ReadAllText(P("a.txt")));
+    }
+
+    [Fact]
     public async Task Refuses_to_copy_folder_into_itself()
     {
         Write(@"src\a.txt");

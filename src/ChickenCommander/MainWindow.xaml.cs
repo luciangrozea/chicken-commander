@@ -157,6 +157,12 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
 
         // External program with placeholders (%P folder, %N name, %F full path, %S selection, %T other panel).
         var panel = vm.ActivePanel;
+        if (!panel.IsLocal && (item.Arguments ?? string.Empty).Contains('%'))
+        {
+            // %N / %F / %S would name files that only exist inside the archive or on the server.
+            ShowError(item.Label ?? "Program", "Programs with file parameters work on local folders. Copy the files out of the archive or server first.");
+            return;
+        }
         var current = panel.CurrentItem is { IsParentLink: false } c ? c.Entry.Name : null;
         var selection = panel.SelectionOrCurrent().Select(i => i.Entry.FullPath).ToList();
         var args = ButtonArguments.Expand(item.Arguments ?? string.Empty, vm.WorkingFolder, current, selection, vm.InactivePanel.CurrentPath);
@@ -295,8 +301,14 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         var mods = Keyboard.Modifiers;
+        // A drop-down or menu that has the keyboard (drive list, hotlist, history) handles its own keys:
+        // Enter picks the entry there instead of opening the item under the panel cursor.
+        if (IsPopupControlFocused) return;
         e.Handled = (!IsTextBoxFocused && HandleContextKey(key, mods)) || RunShortcut(key, mods);
     }
+
+    private static bool IsPopupControlFocused =>
+        Keyboard.FocusedElement is ComboBox or ComboBoxItem or MenuItem or System.Windows.Controls.ContextMenu;
 
     /// <summary>Looks the key up in the (customizable) shortcut map and runs the command.</summary>
     private bool RunShortcut(Key key, ModifierKeys mods)
@@ -373,7 +385,7 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
 
     private void Window_PreviewTextInput(object sender, TextCompositionEventArgs e)
     {
-        if (IsTextBoxFocused || string.IsNullOrEmpty(e.Text) || char.IsControl(e.Text[0])) return;
+        if (IsTextBoxFocused || IsPopupControlFocused || string.IsNullOrEmpty(e.Text) || char.IsControl(e.Text[0])) return;
         vm.CommandLine += e.Text;
         e.Handled = true;
     }

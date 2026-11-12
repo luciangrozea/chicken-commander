@@ -71,6 +71,9 @@ public class ButtonArgumentsTests
     {
         Assert.Equal(@"""C:\My Files""", ButtonArguments.Expand("\"%P\"", @"C:\My Files", null, [], ""));
         Assert.Equal("%X stays", ButtonArguments.Expand("%X stays", "", null, [], ""));
+        // Drive root inside quotes: the trailing backslash must not escape the closing quote.
+        Assert.Equal(@"""D:\\""", ButtonArguments.Expand("\"%P\"", @"D:\", null, [], ""));
+        Assert.Equal(@"D:\", ButtonArguments.Expand("%P", @"D:\", null, [], ""));
     }
 }
 

@@ -7,7 +7,7 @@
         <!-- Drive selector + free space -->
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
             <ComboBox x:Name="DriveBox" Width="64" ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive}"
-                      Focusable="False" ToolTip="Change drive (Alt+F1 / Alt+F2)">
+                      Focusable="False" ToolTip="Change drive (Alt+F1 / Alt+F2)" DropDownClosed="DriveBox_DropDownClosed">
                 <ComboBox.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:DriveItem}">
                         <TextBlock Text="{Binding Letter}" />
@@ -18,11 +18,11 @@
                        TextTrimming="CharacterEllipsis" />
         </DockPanel>
 
-        <!-- Folder tabs (shown when there is more than one). Middle-click closes a tab. -->
+        <!-- Folder tabs (shown when there is more than one). × or middle-click closes a tab, right-click opens its menu. -->
         <ListBox x:Name="TabStrip" DockPanel.Dock="Top" ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab}"
                  Focusable="False" BorderThickness="0" Background="Transparent" Margin="0,0,0,1"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 PreviewMouseDown="TabStrip_PreviewMouseDown">
+                 PreviewMouseDown="TabStrip_PreviewMouseDown" PreviewMouseUp="TabStrip_PreviewMouseUp">
             <ListBox.Style>
                 <Style TargetType="ListBox">
                     <Style.Triggers>
@@ -45,9 +45,19 @@
                         <Setter.Value>
                             <ControlTemplate TargetType="ListBoxItem">
                                 <Border x:Name="Chip" Background="{DynamicResource TabBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1,1,1,0"
-                                        CornerRadius="4,4,0,0" Padding="10,2" Margin="0,0,2,0">
-                                    <TextBlock x:Name="Label" Text="{Binding Title}" MaxWidth="160" TextTrimming="CharacterEllipsis"
-                                               Foreground="{DynamicResource TextBrush}" />
+                                        CornerRadius="4,4,0,0" Padding="10,2,4,2" Margin="0,0,2,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="Label" Text="{Binding Title}" MaxWidth="160" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" />
+                                        <!-- Close button: clicks are handled in TabStrip_PreviewMouseDown (Tag="CloseTab") -->
+                                        <Border x:Name="CloseButton" Tag="CloseTab" Background="Transparent" CornerRadius="3"
+                                                Width="16" Height="16" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                ToolTip="Close tab (Ctrl+W, middle-click)" Opacity="0.45">
+                                            <TextBlock Text="&#xE711;" FontFamily="{DynamicResource IconFont}" FontSize="9"
+                                                       Foreground="{DynamicResource TextBrush}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </StackPanel>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsSelected" Value="True">
@@ -56,6 +66,10 @@
                                     </Trigger>
                                     <Trigger Property="IsMouseOver" Value="True">
                                         <Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource CursorBrush}" />
+                                        <Setter TargetName="CloseButton" Property="Opacity" Value="1" />
+                                    </Trigger>
+                                    <Trigger SourceName="CloseButton" Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="CloseButton" Property="Background" Value="{DynamicResource AppBorderBrush}" />
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>

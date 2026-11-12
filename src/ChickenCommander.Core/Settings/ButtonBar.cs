@@ -70,6 +70,11 @@ public static class ButtonArguments
         return sb.ToString();
     }
 
-    private static string Quote(string value, bool inQuotes) =>
-        inQuotes || !value.Contains(' ') ? value : $"\"{value}\"";
+    private static string Quote(string value, bool inQuotes)
+    {
+        if (!inQuotes && !value.Contains(' ')) return value;
+        // A backslash right before the closing quote would escape it ("D:\" reaches the program as D:"), so double it.
+        if (value.EndsWith('\\')) value += "\\";
+        return inQuotes ? value : $"\"{value}\"";
+    }
 }

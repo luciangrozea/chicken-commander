@@ -91,7 +91,7 @@ public partial class MainViewModel
     {
         var items = ActivePanel.SelectionOrCurrent();
         if (items.Count == 0 || !RequireLocal("Pack")) return;
-        var baseName = items.Count == 1 ? Path.GetFileNameWithoutExtension(items[0].Entry.Name.TrimEnd('\\')) : new DirectoryInfo(ActivePanel.CurrentPath).Name;
+        var baseName = items.Count == 1 ? Path.GetFileNameWithoutExtension(items[0].Entry.Name.TrimEnd('\\')) : FolderName(ActivePanel.CurrentPath);
         if (string.IsNullOrEmpty(baseName)) baseName = "archive";
         var targetDir = InactivePanel.IsLocal ? InactivePanel.CurrentPath : ActivePanel.CurrentPath;
         var what = items.Count == 1 ? $"\"{items[0].Entry.Name}\"" : $"{items.Count} file(s)/dir(s)";
@@ -178,12 +178,20 @@ public partial class MainViewModel
         }
         var name = session.Connection.Name;
         Vfs.Sessions.Close(name);
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        bool OnThisServer(string path) =>
+            Vfs.Remote.CanHandle(path) && RemotePath.TryParsePanelPath(path, out _, out var n, out _) && n == name;
         foreach (var panel in new[] { Left, Right })
         {
-            if (Vfs.Remote.CanHandle(panel.CurrentPath) && RemotePath.TryParsePanelPath(panel.CurrentPath, out _, out var n, out _) && n == name)
-                panel.Navigate(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+            // Background tabs on that server would point at a closed connection: send them home too.
+            foreach (var tab in panel.Tabs.Where(t => t != panel.ActiveTab && OnThisServer(t.Path))) tab.Path = home;
+            if (OnThisServer(panel.CurrentPath)) panel.Navigate(home);
         }
     }
+
+    /// <summary>Name of a folder for default file names; null for a drive root, which has no name of its own.</summary>
+    private static string? FolderName(string path) =>
+        Path.GetFileName(Path.TrimEndingDirectorySeparator(path)) is { Length: > 0 } name ? name : null;
 
     private IRemoteClient CreateClient(string connectionName, string? password)
     {
@@ -222,7 +230,7 @@ public partial class MainViewModel
         var kind = answer.Kind;
         var outputs = answer.OnePerFile
             ? files.Select(f => (Output: f + Checksums.Extension(kind), Files: (IReadOnlyList<string>)[f])).ToList()
-            : [(Path.Combine(folder, (files.Count == 1 ? Path.GetFileName(files[0]) : new DirectoryInfo(folder).Name) + Checksums.Extension(kind)), files)];
+            : [(Path.Combine(folder, (files.Count == 1 ? Path.GetFileName(files[0]) : FolderName(folder) ?? "checksums") + Checksums.Extension(kind)), files)];
 
         Operations.Enqueue(new TransferOperationViewModel(TransferOperationViewModel.Describe("Checksum " + kind.ToString().ToUpperInvariant(), files, folder), dialogs,
             async (cb, pause, ct) =>

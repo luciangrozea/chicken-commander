@@ -34,6 +34,10 @@ public partial class FilePanel : UserControl
         DriveBox.Focus();
     }
 
+    /// <summary>After picking a drive (or closing the list with Esc) the keyboard goes back to the file list.</summary>
+    private void DriveBox_DropDownClosed(object? sender, EventArgs e) =>
+        Dispatcher.BeginInvoke(FocusList, DispatcherPriority.Input);
+
     public void FocusPathBox()
     {
         PathBox.Focus();
@@ -136,13 +140,56 @@ public partial class FilePanel : UserControl
     private void TabStrip_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is not DependencyObject d || FindParent<ListBoxItem>(d) is not { DataContext: PanelTab tab }) return;
-        if (e.ChangedButton == MouseButton.Middle)
+        var onCloseButton = IsInsideCloseButton(d);
+        if (e.ChangedButton == MouseButton.Middle || (e.ChangedButton == MouseButton.Left && onCloseButton))
         {
             ViewModel?.CloseTab(tab);
             e.Handled = true;
         }
+        else if (e.ChangedButton == MouseButton.Right)
+        {
+            // Do not switch to the tab; its menu opens on button release (TabStrip_PreviewMouseUp).
+            e.Handled = true;
+        }
         // Clicking a tab also activates this panel.
         Dispatcher.BeginInvoke(FocusList, DispatcherPriority.Input);
+    }
+
+    private void TabStrip_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Right) return;
+        if (e.OriginalSource is not DependencyObject d || FindParent<ListBoxItem>(d) is not { DataContext: PanelTab tab } item) return;
+        e.Handled = true;
+        ShowTabMenu(tab, item);
+    }
+
+    /// <summary>Right-click menu of a tab: close it, close the others, duplicate it.</summary>
+    private void ShowTabMenu(PanelTab tab, UIElement target)
+    {
+        var vm = ViewModel;
+        if (vm is null) return;
+        var canClose = vm.Tabs.Count > 1;
+        var menu = new ContextMenu { PlacementTarget = target, Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint };
+
+        var close = new MenuItem { Header = "_Close tab", IsEnabled = canClose };
+        close.Click += (_, _) => { vm.CloseTab(tab); FocusList(); };
+        var closeOthers = new MenuItem { Header = "Close _other tabs", IsEnabled = canClose };
+        closeOthers.Click += (_, _) => { vm.CloseOtherTabs(tab); FocusList(); };
+        var duplicate = new MenuItem { Header = "_Duplicate tab" };
+        duplicate.Click += (_, _) => { vm.ActiveTab = tab; vm.NewTab(tab.Path); FocusList(); };
+
+        menu.Items.Add(close);
+        menu.Items.Add(closeOthers);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(duplicate);
+        menu.IsOpen = true;
+    }
+
+    private static bool IsInsideCloseButton(DependencyObject? d)
+    {
+        for (; d is not null and not ListBoxItem; d = d is System.Windows.Media.Visual ? System.Windows.Media.VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+            if (d is FrameworkElement { Tag: "CloseTab" }) return true;
+        return false;
     }
 
     /// <summary>Screen point just under the path bar, where popup menus (hotlist, history) appear.</summary>

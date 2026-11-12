@@ -18,8 +18,10 @@ public static class FileTransfer
     /// </summary>
     public static IReadOnlyList<(string Source, string Destination)> MapDestinations(IReadOnlyList<string> sources, string target)
     {
-        var intoFolder = target.EndsWith('\\') || target.EndsWith('/') || Directory.Exists(target) || sources.Count > 1;
         var root = Path.TrimEndingDirectorySeparator(target);
+        // "photos" → "Photos": the "existing folder" is the source itself, so this is a new name, not a destination folder.
+        var isSourceItself = sources.Count == 1 && !target.EndsWith('\\') && !target.EndsWith('/') && PathsEqual(sources[0], root);
+        var intoFolder = !isSourceItself && (target.EndsWith('\\') || target.EndsWith('/') || Directory.Exists(target) || sources.Count > 1);
         return sources
             .Select(s => (s, intoFolder ? Path.Combine(root, Path.GetFileName(Path.TrimEndingDirectorySeparator(s))) : root))
             .ToList();
@@ -53,7 +55,19 @@ public static class FileTransfer
 
             if (PathsEqual(source, destination))
             {
-                if (request.Kind == TransferKind.Move) { skipped++; continue; }
+                if (request.Kind == TransferKind.Move)
+                {
+                    // Same path except for upper/lower case: a rename ("readme.txt" → "README.txt").
+                    var oldName = Path.GetFileName(source.TrimEnd('\\'));
+                    var newName = Path.GetFileName(destination.TrimEnd('\\'));
+                    if (newName.Length > 0 && !string.Equals(oldName, newName, StringComparison.Ordinal))
+                    {
+                        RenameCaseOnly(source, destination.TrimEnd('\\'), isDir);
+                        done++;
+                    }
+                    else skipped++;
+                    continue;
+                }
                 // Copy onto itself: make "name (2).ext" next to it, like Explorer's "- Copy".
                 destination = Path.Combine(Path.GetDirectoryName(destination)!, PathHelper.UniqueName(Path.GetDirectoryName(destination)!, Path.GetFileName(destination)));
             }
@@ -261,6 +275,19 @@ public static class FileTransfer
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
+    }
+
+    /// <summary>Changes only the case of a name; folders go through a temporary name, which Windows needs for them.</summary>
+    private static void RenameCaseOnly(string source, string destination, bool isDirectory)
+    {
+        if (!isDirectory)
+        {
+            File.Move(source, destination);
+            return;
+        }
+        var temp = Path.Combine(Path.GetDirectoryName(destination)!, PathHelper.UniqueName(Path.GetDirectoryName(destination)!, Path.GetFileName(destination) + ".tmp-rename"));
+        Directory.Move(source, temp);
+        Directory.Move(temp, destination);
     }
 
     private static bool PathsEqual(string a, string b) =>
