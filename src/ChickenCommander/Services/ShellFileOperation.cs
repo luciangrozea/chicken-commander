@@ -3,18 +3,12 @@ using System.Runtime.InteropServices;
 namespace ChickenCommander.Services;
 
 /// <summary>
-/// Copy / move / delete / rename through the Windows shell (SHFileOperation). This gives native progress,
-/// overwrite prompts and Recycle Bin support for free. A custom background operation queue replaces it in v0.2.
+/// Delete and rename through the Windows shell (SHFileOperation), for Recycle Bin support and Explorer-style undo.
+/// Copy and move use the app's own engine (see ChickenCommander.Core.Operations.FileTransfer).
 /// </summary>
 public static class ShellFileOperation
 {
     /// <returns>false if the user cancelled or the operation failed.</returns>
-    public static bool Copy(IntPtr owner, IEnumerable<string> sources, string destination) =>
-        Run(owner, FoCopy, sources, destination, FofAllowUndo | FofNoConfirmMkdir);
-
-    public static bool Move(IntPtr owner, IEnumerable<string> sources, string destination) =>
-        Run(owner, FoMove, sources, destination, FofAllowUndo | FofNoConfirmMkdir);
-
     public static bool Delete(IntPtr owner, IEnumerable<string> paths, bool toRecycleBin) =>
         Run(owner, FoDelete, paths, null, (ushort)(FofNoConfirmation | FofWantNukeWarning | (toRecycleBin ? FofAllowUndo : 0)));
 
@@ -35,8 +29,8 @@ public static class ShellFileOperation
         return result == 0 && !op.fAnyOperationsAborted;
     }
 
-    private const uint FoMove = 1, FoCopy = 2, FoDelete = 3, FoRename = 4;
-    private const ushort FofNoConfirmation = 0x10, FofAllowUndo = 0x40, FofNoConfirmMkdir = 0x200, FofWantNukeWarning = 0x4000;
+    private const uint FoDelete = 3, FoRename = 4;
+    private const ushort FofNoConfirmation = 0x10, FofAllowUndo = 0x40, FofWantNukeWarning = 0x4000;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct SHFILEOPSTRUCT

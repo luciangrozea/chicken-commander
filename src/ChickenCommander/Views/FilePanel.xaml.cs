@@ -124,6 +124,21 @@ public partial class FilePanel : UserControl
         }
     }
 
+    private void TabStrip_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject d || FindParent<ListBoxItem>(d) is not { DataContext: PanelTab tab }) return;
+        if (e.ChangedButton == MouseButton.Middle)
+        {
+            ViewModel?.CloseTab(tab);
+            e.Handled = true;
+        }
+        // Clicking a tab also activates this panel.
+        Dispatcher.BeginInvoke(FocusList, DispatcherPriority.Input);
+    }
+
+    /// <summary>Screen point just under the path bar, where popup menus (hotlist, history) appear.</summary>
+    public UIElement MenuAnchor => PathBox;
+
     private static int IndexOf(IReadOnlyList<FileItemViewModel> list, FileItemViewModel item)
     {
         for (var i = 0; i < list.Count; i++)

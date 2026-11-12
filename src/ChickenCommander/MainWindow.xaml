@@ -7,7 +7,8 @@
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource ChromeBrush}"
         PreviewKeyDown="Window_PreviewKeyDown"
-        PreviewTextInput="Window_PreviewTextInput">
+        PreviewTextInput="Window_PreviewTextInput"
+        Closing="Window_Closing">
     <DockPanel>
         <Menu DockPanel.Dock="Top" Background="{StaticResource ChromeBrush}" Padding="2">
             <MenuItem Header="_Files">
@@ -21,20 +22,37 @@
                 <MenuItem Header="_Delete" InputGestureText="F8 / Del" Command="{Binding DeleteCommand}" />
                 <MenuItem Header="Delete _permanently" InputGestureText="Shift+Del" Command="{Binding DeletePermanentlyCommand}" />
                 <Separator />
+                <MenuItem Header="_Multi-Rename tool..." InputGestureText="Ctrl+M" Command="{Binding MultiRenameCommand}" />
+                <MenuItem Header="Change _attributes..." InputGestureText="Ctrl+I" Command="{Binding ChangeAttributesCommand}" />
+                <MenuItem Header="File _operations window" InputGestureText="Ctrl+Shift+O" Command="{Binding ShowOperationsCommand}" />
+                <Separator />
                 <MenuItem Header="E_xit" InputGestureText="Alt+F4" Click="Exit_Click" />
             </MenuItem>
             <MenuItem Header="_Mark">
                 <MenuItem Header="_Select group..." InputGestureText="Num +" Command="{Binding SelectGroupCommand}" />
                 <MenuItem Header="_Unselect group..." InputGestureText="Num -" Command="{Binding UnselectGroupCommand}" />
                 <MenuItem Header="Select _all" InputGestureText="Ctrl+A" Command="{Binding SelectAllCommand}" />
-                <MenuItem Header="Unselect a_ll" InputGestureText="Ctrl+D" Command="{Binding UnselectAllCommand}" />
+                <MenuItem Header="Unselect a_ll" InputGestureText="Ctrl+Shift+A" Command="{Binding UnselectAllCommand}" />
                 <MenuItem Header="_Invert selection" InputGestureText="Num *" Command="{Binding InvertSelectionCommand}" />
             </MenuItem>
             <MenuItem Header="_Commands">
+                <MenuItem Header="Directory _hotlist" InputGestureText="Ctrl+D" Command="{Binding ShowHotlistCommand}" />
+                <MenuItem Header="Add current folder to hotlist..." Command="{Binding AddToHotlistCommand}" />
+                <MenuItem Header="Folder hi_story" InputGestureText="Alt+Down" Command="{Binding ShowHistoryCommand}" />
+                <MenuItem Header="_Back" InputGestureText="Alt+Left" Command="{Binding GoBackCommand}" />
+                <MenuItem Header="_Forward" InputGestureText="Alt+Right" Command="{Binding GoForwardCommand}" />
+                <Separator />
                 <MenuItem Header="_Swap panels" InputGestureText="Ctrl+U" Command="{Binding SwapPanelsCommand}" />
                 <MenuItem Header="_Target = Source" InputGestureText="Ctrl+E" Command="{Binding TargetEqualsSourceCommand}" />
                 <MenuItem Header="Command _prompt here" Click="OpenCmd_Click" />
                 <MenuItem Header="Open in _Explorer" Click="OpenExplorer_Click" />
+            </MenuItem>
+            <MenuItem Header="_Tabs">
+                <MenuItem Header="_New tab" InputGestureText="Ctrl+T" Command="{Binding NewTabCommand}" />
+                <MenuItem Header="Open folder in new _tab" InputGestureText="Ctrl+Up" Command="{Binding OpenInNewTabCommand}" />
+                <MenuItem Header="_Close tab" InputGestureText="Ctrl+W" Command="{Binding CloseTabCommand}" />
+                <MenuItem Header="Ne_xt tab" InputGestureText="Ctrl+Tab" Command="{Binding NextTabCommand}" />
+                <MenuItem Header="_Previous tab" InputGestureText="Ctrl+Shift+Tab" Command="{Binding PreviousTabCommand}" />
             </MenuItem>
             <MenuItem Header="_Show">
                 <MenuItem Header="_Hidden/system files" InputGestureText="Ctrl+H" IsCheckable="True"

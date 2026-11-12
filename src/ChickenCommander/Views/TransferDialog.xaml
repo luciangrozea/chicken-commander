@@ -1,0 +1,27 @@
+<Window x:Class="ChickenCommander.Views.TransferDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="520" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource ChromeBrush}">
+    <StackPanel Margin="14">
+        <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,0,0,6" />
+        <TextBox x:Name="TargetBox" Padding="3" />
+        <DockPanel Margin="0,10,0,0">
+            <TextBlock Text="If the file exists:" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <ComboBox x:Name="OverwriteBox" SelectedIndex="0">
+                <ComboBoxItem Content="Ask me" />
+                <ComboBoxItem Content="Overwrite all" />
+                <ComboBoxItem Content="Skip all" />
+                <ComboBoxItem Content="Overwrite only older files" />
+                <ComboBoxItem Content="Rename all (keep both)" />
+            </ComboBox>
+        </DockPanel>
+        <TextBlock Text="The job runs in the background; you can keep working and queue more." Foreground="#5A6275"
+                   Margin="0,10,0,0" FontSize="11" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="OK" Width="80" IsDefault="True" Click="Ok_Click" Margin="0,0,8,0" />
+            <Button Content="Cancel" Width="80" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

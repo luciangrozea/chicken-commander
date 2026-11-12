@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using ChickenCommander.Core.FileSystem;
+using ChickenCommander.Core.Operations;
+using ChickenCommander.Core.Settings;
 using ChickenCommander.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -9,36 +11,54 @@ namespace ChickenCommander.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private readonly IDialogService dialogs;
+    private readonly AppSettings settings;
 
     [ObservableProperty] private FilePanelViewModel activePanel = null!;
     [ObservableProperty] private string commandLine = string.Empty;
 
-    public MainViewModel(IDialogService dialogs)
+    public MainViewModel(IDialogService dialogs, AppSettings settings, OperationQueue operations)
     {
         this.dialogs = dialogs;
-        Left = new FilePanelViewModel();
-        Right = new FilePanelViewModel();
+        this.settings = settings;
+        Operations = operations;
+        Operations.Completed += OnOperationCompleted;
+
+        Left = new FilePanelViewModel { ShowHidden = settings.ShowHidden };
+        Right = new FilePanelViewModel { ShowHidden = settings.ShowHidden };
         Left.ErrorOccurred += msg => dialogs.ShowError("Chicken Commander", msg);
         Right.ErrorOccurred += msg => dialogs.ShowError("Chicken Commander", msg);
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var systemRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? @"C:\";
-        Left.Navigate(home);
-        Right.Navigate(systemRoot);
+        Left.Restore(settings.Left, home);
+        Right.Restore(settings.Right, systemRoot);
 
-        ActivePanel = Left;
+        ActivePanel = settings.LeftIsActive ? Left : Right;
     }
 
-    public FilePanelViewModel Left { get; private set; }
-    public FilePanelViewModel Right { get; private set; }
+    public FilePanelViewModel Left { get; }
+    public FilePanelViewModel Right { get; }
     public FilePanelViewModel InactivePanel => ActivePanel == Left ? Right : Left;
+    public OperationQueue Operations { get; }
 
     /// <summary>Prompt shown left of the command line, e.g. "C:\Users&gt;".</summary>
     public string CommandPrompt => ActivePanel.CurrentPath + ">";
 
+    public bool ShowHidden => Left.ShowHidden;
+
+    /// <summary>Copies the current state into the settings object (the window saves it on exit).</summary>
+    public AppSettings CaptureSettings()
+    {
+        settings.Left = Left.ToSettings();
+        settings.Right = Right.ToSettings();
+        settings.LeftIsActive = ActivePanel == Left;
+        settings.ShowHidden = ShowHidden;
+        return settings;
+    }
+
     partial void OnActivePanelChanged(FilePanelViewModel? oldValue, FilePanelViewModel newValue)
     {
-        if (oldValue is not null) // null only for the first assignment in the constructor
+        if (oldValue is not null)
         {
             oldValue.IsActive = false;
             oldValue.PropertyChanged -= OnActivePanelPropertyChanged;
@@ -70,10 +90,10 @@ public partial class MainViewModel : ObservableObject
     private void Edit() => LaunchCurrent(edit: true);
 
     [RelayCommand]
-    private void Copy() => Transfer(move: false);
+    private void Copy() => Transfer(TransferKind.Copy);
 
     [RelayCommand]
-    private void Move() => Transfer(move: true);
+    private void Move() => Transfer(TransferKind.Move);
 
     [RelayCommand]
     private void MakeDirectory()
@@ -85,7 +105,7 @@ public partial class MainViewModel : ObservableObject
             Directory.CreateDirectory(Path.Combine(ActivePanel.CurrentPath, name.Trim()));
             // "a\b\c" creates nested folders; put the cursor on the first level.
             var firstLevel = name.Trim().Split('\\', '/')[0];
-            ActivePanel.Navigate(ActivePanel.CurrentPath, firstLevel);
+            ActivePanel.Navigate(ActivePanel.CurrentPath, firstLevel, recordHistory: false);
             RefreshInactiveIfSameDirectory();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
@@ -110,13 +130,121 @@ public partial class MainViewModel : ObservableObject
         var target = Path.Combine(ActivePanel.CurrentPath, newName.Trim());
         if (ShellFileOperation.Rename(dialogs.OwnerHandle, item.Entry.FullPath, target))
         {
-            ActivePanel.Navigate(ActivePanel.CurrentPath, Path.GetFileName(target));
+            ActivePanel.Navigate(ActivePanel.CurrentPath, Path.GetFileName(target), recordHistory: false);
             RefreshInactiveIfSameDirectory();
         }
         else
         {
             ActivePanel.Refresh();
         }
+    }
+
+    // ---- Tools -------------------------------------------------------------------------------
+
+    [RelayCommand]
+    private void MultiRename()
+    {
+        var items = ActivePanel.SelectionOrCurrent();
+        if (items.Count == 0) return;
+        var sources = items.Select(i => new RenameSource(i.Entry.FullPath, i.Entry.IsDirectory, i.Entry.Modified)).ToList();
+        if (dialogs.ShowMultiRename(sources))
+        {
+            ActivePanel.MarkAll(false);
+            ActivePanel.Refresh();
+            RefreshInactiveIfSameDirectory();
+        }
+        ActivePanel.RequestFocus();
+    }
+
+    [RelayCommand]
+    private void ChangeAttributes()
+    {
+        var items = ActivePanel.SelectionOrCurrent();
+        if (items.Count == 0) return;
+        if (dialogs.ShowAttributes(items.Select(i => i.Entry).ToList()))
+        {
+            ActivePanel.Refresh();
+            RefreshInactiveIfSameDirectory();
+        }
+        ActivePanel.RequestFocus();
+    }
+
+    [RelayCommand]
+    private void ShowOperations() => OperationsWindowRequested?.Invoke();
+
+    /// <summary>The view shows the operations window when asked.</summary>
+    public event Action? OperationsWindowRequested;
+
+    // ---- Tabs & history ----------------------------------------------------------------------
+
+    [RelayCommand]
+    private void NewTab() => ActivePanel.NewTab();
+
+    [RelayCommand]
+    private void CloseTab() => ActivePanel.CloseTab();
+
+    [RelayCommand]
+    private void NextTab() => ActivePanel.CycleTab(+1);
+
+    [RelayCommand]
+    private void PreviousTab() => ActivePanel.CycleTab(-1);
+
+    /// <summary>Opens the folder under the cursor in a new tab (Ctrl+Up).</summary>
+    [RelayCommand]
+    private void OpenInNewTab()
+    {
+        var item = ActivePanel.CurrentItem;
+        var path = item is { IsParentLink: false, Entry.IsDirectory: true } ? item.Entry.FullPath : ActivePanel.CurrentPath;
+        ActivePanel.NewTab(path);
+    }
+
+    [RelayCommand]
+    private void GoBack() => ActivePanel.GoBack();
+
+    [RelayCommand]
+    private void GoForward() => ActivePanel.GoForward();
+
+    [RelayCommand]
+    private void ShowHistory()
+    {
+        var panel = ActivePanel;
+        var recent = panel.ActiveTab?.History.Recent() ?? [];
+        if (recent.Count == 0) return;
+        dialogs.ShowMenu(recent.Select(p => new MenuEntry(p, () => panel.Navigate(p))).ToList());
+    }
+
+    // ---- Hotlist -----------------------------------------------------------------------------
+
+    public IReadOnlyList<HotlistEntry> Hotlist => settings.Hotlist;
+
+    [RelayCommand]
+    private void ShowHotlist()
+    {
+        var panel = ActivePanel;
+        var entries = new List<MenuEntry>();
+        foreach (var h in settings.Hotlist)
+            entries.Add(new MenuEntry(h.Name, () => panel.Navigate(h.Path), h.Path));
+        if (entries.Count > 0) entries.Add(MenuEntry.Separator);
+        entries.Add(new MenuEntry($"Add \"{panel.ActiveTab?.Title}\" to hotlist", AddToHotlist));
+        if (settings.Hotlist.Count > 0)
+        {
+            var remove = settings.Hotlist.FirstOrDefault(h => string.Equals(h.Path, panel.CurrentPath, StringComparison.OrdinalIgnoreCase));
+            if (remove is not null)
+                entries.Add(new MenuEntry($"Remove \"{remove.Name}\" from hotlist", () => settings.Hotlist.Remove(remove)));
+        }
+        dialogs.ShowMenu(entries);
+    }
+
+    [RelayCommand]
+    private void AddToHotlist()
+    {
+        var path = ActivePanel.CurrentPath;
+        var suggested = ActivePanel.ActiveTab?.Title ?? path;
+        var name = dialogs.Prompt("Directory hotlist", $"Name for {path}:", suggested);
+        if (string.IsNullOrWhiteSpace(name)) return;
+        settings.Hotlist.RemoveAll(h => string.Equals(h.Path, path, StringComparison.OrdinalIgnoreCase));
+        settings.Hotlist.Add(new HotlistEntry(name.Trim(), path));
+        settings.Hotlist.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
     }
 
     // ---- Panels ----------------------------------------------------------------------------
@@ -154,8 +282,6 @@ public partial class MainViewModel : ObservableObject
         Right.Refresh();
         OnPropertyChanged(nameof(ShowHidden));
     }
-
-    public bool ShowHidden => Left.ShowHidden;
 
     // ---- Marking ---------------------------------------------------------------------------
 
@@ -249,27 +375,32 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private void Transfer(bool move)
+    private void Transfer(TransferKind kind)
     {
         var items = ActivePanel.SelectionOrCurrent();
         if (items.Count == 0) return;
 
         var what = items.Count == 1 ? $"\"{items[0].Entry.Name}\"" : $"{items.Count} file(s)/dir(s)";
-        var initial = Path.Combine(InactivePanel.CurrentPath, "");
+        var initial = InactivePanel.CurrentPath;
         if (!initial.EndsWith('\\')) initial += "\\";
-        var target = dialogs.Prompt(move ? "Move" : "Copy", $"{(move ? "Rename/move" : "Copy")} {what} to:", initial);
-        if (string.IsNullOrWhiteSpace(target)) return;
+        if (dialogs.AskTransfer(kind, what, initial) is not { } answer || string.IsNullOrWhiteSpace(answer.Target)) return;
 
+        var target = answer.Target.Trim();
+        var keepSeparator = target.EndsWith('\\') || target.EndsWith('/');
         target = PathHelper.Resolve(ActivePanel.CurrentPath, target);
-        var sources = items.Select(i => i.Entry.FullPath).ToList();
-        if (move) ShellFileOperation.Move(dialogs.OwnerHandle, sources, target);
-        else ShellFileOperation.Copy(dialogs.OwnerHandle, sources, target);
+        if (keepSeparator && !target.EndsWith('\\')) target += "\\";
 
-        // Unmark what was transferred, then reload both sides.
+        var request = new TransferRequest(kind, items.Select(i => i.Entry.FullPath).ToList(), target, answer.Mode);
         foreach (var i in items) i.IsMarked = false;
-        ActivePanel.Refresh();
-        InactivePanel.Refresh();
+        Operations.Enqueue(new TransferOperationViewModel(request, dialogs));
         ActivePanel.RequestFocus();
+    }
+
+    private void OnOperationCompleted(TransferOperationViewModel op)
+    {
+        Left.Refresh();
+        Right.Refresh();
+        if (op.State == OperationState.Failed) dialogs.ShowError(op.Title, op.DetailText);
     }
 
     private void DeleteSelection(bool toRecycleBin)
@@ -288,7 +419,7 @@ public partial class MainViewModel : ObservableObject
                    ?? all.Take(lastIndex).LastOrDefault(i => !deleted.Contains(i));
 
         ShellFileOperation.Delete(dialogs.OwnerHandle, items.Select(i => i.Entry.FullPath), toRecycleBin);
-        ActivePanel.Navigate(ActivePanel.CurrentPath, next?.Entry.Name);
+        ActivePanel.Navigate(ActivePanel.CurrentPath, next?.Entry.Name, recordHistory: false);
         RefreshInactiveIfSameDirectory();
     }
 

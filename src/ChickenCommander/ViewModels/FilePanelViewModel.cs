@@ -1,13 +1,16 @@
+using System.Collections.ObjectModel;
 using ChickenCommander.Core.FileSystem;
+using ChickenCommander.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ChickenCommander.ViewModels;
 
-/// <summary>State of one of the two file panels: current directory, listing, cursor and marked items.</summary>
+/// <summary>State of one of the two file panels: tabs, current directory, listing, cursor and marked items.</summary>
 public partial class FilePanelViewModel : ObservableObject
 {
     private readonly Dictionary<string, string> lastPathPerDrive = new(StringComparer.OrdinalIgnoreCase);
     private bool syncingDrive;
+    private bool switchingTab;
 
     [ObservableProperty] private string currentPath = string.Empty;
     [ObservableProperty] private IReadOnlyList<FileItemViewModel> items = [];
@@ -16,11 +19,14 @@ public partial class FilePanelViewModel : ObservableObject
     [ObservableProperty] private DriveItem? selectedDrive;
     [ObservableProperty] private string statusText = string.Empty;
     [ObservableProperty] private string freeSpaceText = string.Empty;
+    [ObservableProperty] private PanelTab? activeTab;
 
     public FilePanelViewModel()
     {
         RefreshDrives();
     }
+
+    public ObservableCollection<PanelTab> Tabs { get; } = [];
 
     public IReadOnlyList<DriveItem> Drives { get; private set; } = [];
 
@@ -50,8 +56,31 @@ public partial class FilePanelViewModel : ObservableObject
         OnPropertyChanged(nameof(Drives));
     }
 
+    // ---- Settings ----------------------------------------------------------------------------
+
+    /// <summary>Restores tabs from settings; missing folders are dropped, and <paramref name="fallback"/> is used if none remain.</summary>
+    public void Restore(PanelSettings settings, string fallback)
+    {
+        Tabs.Clear();
+        foreach (var path in settings.Tabs.Where(Directory.Exists)) Tabs.Add(new PanelTab(path));
+        if (Tabs.Count == 0) Tabs.Add(new PanelTab(fallback));
+        var active = Tabs[Math.Clamp(settings.ActiveTab, 0, Tabs.Count - 1)];
+        switchingTab = true;
+        ActiveTab = active;
+        switchingTab = false;
+        if (!Navigate(active.Path)) Navigate(fallback);
+    }
+
+    public PanelSettings ToSettings() => new()
+    {
+        Tabs = Tabs.Select(t => t.Path).ToList(),
+        ActiveTab = ActiveTab is null ? 0 : Tabs.IndexOf(ActiveTab),
+    };
+
+    // ---- Navigation --------------------------------------------------------------------------
+
     /// <summary>Loads <paramref name="path"/> and puts the cursor on <paramref name="selectName"/> if present.</summary>
-    public bool Navigate(string path, string? selectName = null, IReadOnlySet<string>? keepMarked = null)
+    public bool Navigate(string path, string? selectName = null, IReadOnlySet<string>? keepMarked = null, bool recordHistory = true)
     {
         IReadOnlyList<FileEntry> entries;
         try
@@ -75,6 +104,17 @@ public partial class FilePanelViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(FileItemViewModel.IsMarked)) UpdateStatus();
         };
+
+        if (ActiveTab is null)
+        {
+            var tab = new PanelTab(full);
+            Tabs.Add(tab);
+            switchingTab = true;
+            ActiveTab = tab;
+            switchingTab = false;
+        }
+        ActiveTab.Path = full;
+        if (recordHistory) ActiveTab.History.Visit(full);
 
         CurrentPath = full;
         Items = list;
@@ -106,7 +146,7 @@ public partial class FilePanelViewModel : ObservableObject
             Navigate(dir ?? Path.GetPathRoot(Environment.SystemDirectory)!);
             return;
         }
-        Navigate(CurrentPath, name, marked);
+        Navigate(CurrentPath, name, marked, recordHistory: false);
     }
 
     public void GoUp()
@@ -114,6 +154,16 @@ public partial class FilePanelViewModel : ObservableObject
         var parent = Directory.GetParent(CurrentPath);
         if (parent is null) return;
         Navigate(parent.FullName, Path.GetFileName(CurrentPath.TrimEnd('\\')));
+    }
+
+    public void GoBack()
+    {
+        if (ActiveTab?.History.GoBack() is { } path) Navigate(path, recordHistory: false);
+    }
+
+    public void GoForward()
+    {
+        if (ActiveTab?.History.GoForward() is { } path) Navigate(path, recordHistory: false);
     }
 
     /// <summary>Enters a directory; returns false for files so the caller can launch them.</summary>
@@ -134,6 +184,52 @@ public partial class FilePanelViewModel : ObservableObject
         Sort = Sort.Toggle(column);
         Refresh();
     }
+
+    // ---- Tabs --------------------------------------------------------------------------------
+
+    /// <summary>Opens a new tab (on <paramref name="path"/>, or a copy of the current folder) right after the active one.</summary>
+    public void NewTab(string? path = null)
+    {
+        var tab = new PanelTab(path ?? CurrentPath);
+        var index = ActiveTab is null ? Tabs.Count : Tabs.IndexOf(ActiveTab) + 1;
+        Tabs.Insert(index, tab);
+        ActiveTab = tab;
+    }
+
+    public void CloseTab(PanelTab? tab = null)
+    {
+        tab ??= ActiveTab;
+        if (tab is null || Tabs.Count <= 1) return;
+        var index = Tabs.IndexOf(tab);
+        var wasActive = tab == ActiveTab;
+        Tabs.Remove(tab);
+        if (wasActive) ActiveTab = Tabs[Math.Min(index, Tabs.Count - 1)];
+    }
+
+    public void CycleTab(int delta)
+    {
+        if (Tabs.Count <= 1 || ActiveTab is null) return;
+        var index = (Tabs.IndexOf(ActiveTab) + delta + Tabs.Count) % Tabs.Count;
+        ActiveTab = Tabs[index];
+    }
+
+    partial void OnActiveTabChanged(PanelTab? oldValue, PanelTab? newValue)
+    {
+        if (switchingTab || newValue is null) return;
+        if (oldValue is not null) oldValue.CursorName = CurrentItem?.Entry.Name;
+        if (!string.Equals(newValue.Path, CurrentPath, StringComparison.OrdinalIgnoreCase) || oldValue != newValue)
+        {
+            if (!Navigate(newValue.Path, newValue.CursorName, recordHistory: newValue.History.Current is null))
+            {
+                // Folder of that tab is gone: fall back to its nearest existing parent.
+                var dir = newValue.Path;
+                while (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) dir = Path.GetDirectoryName(dir);
+                if (dir is not null) Navigate(dir);
+            }
+        }
+    }
+
+    // ---- Marking -----------------------------------------------------------------------------
 
     public void ToggleMark(FileItemViewModel? item)
     {

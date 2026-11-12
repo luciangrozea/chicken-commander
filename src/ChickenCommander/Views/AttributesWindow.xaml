@@ -1,0 +1,38 @@
+<Window x:Class="ChickenCommander.Views.AttributesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Change attributes" Width="400" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource ChromeBrush}">
+    <StackPanel Margin="14">
+        <TextBlock x:Name="TargetText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,0,10" />
+
+        <GroupBox Header="Attributes" Padding="8">
+            <StackPanel>
+                <TextBlock Text="A filled box means: leave as it is (items differ)." Foreground="#5A6275" FontSize="11" Margin="0,0,0,6" />
+                <CheckBox x:Name="ReadOnlyBox" Content="_Read only" IsThreeState="True" Margin="0,2" />
+                <CheckBox x:Name="ArchiveBox" Content="_Archive" IsThreeState="True" Margin="0,2" />
+                <CheckBox x:Name="HiddenBox" Content="_Hidden" IsThreeState="True" Margin="0,2" />
+                <CheckBox x:Name="SystemBox" Content="_System" IsThreeState="True" Margin="0,2" />
+            </StackPanel>
+        </GroupBox>
+
+        <GroupBox Header="Date / time" Padding="8" Margin="0,8,0,0">
+            <StackPanel>
+                <CheckBox x:Name="ChangeDateBox" Content="Change _modification date" />
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0" IsEnabled="{Binding IsChecked, ElementName=ChangeDateBox}">
+                    <DatePicker x:Name="DateBox" Width="140" />
+                    <TextBox x:Name="TimeBox" Width="80" Margin="8,0,0,0" Padding="2" VerticalContentAlignment="Center" ToolTip="HH:mm:ss" />
+                    <Button Content="Now" Margin="8,0,0,0" Padding="8,0" Click="Now_Click" />
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <CheckBox x:Name="SubfoldersBox" Content="Include _subfolders and their contents" Margin="0,10,0,0" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="OK" Width="80" IsDefault="True" Click="Ok_Click" Margin="0,0,8,0" />
+            <Button Content="Cancel" Width="80" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

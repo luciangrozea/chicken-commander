@@ -18,6 +18,52 @@
                        TextTrimming="CharacterEllipsis" />
         </DockPanel>
 
+        <!-- Folder tabs (shown when there is more than one). Middle-click closes a tab. -->
+        <ListBox x:Name="TabStrip" DockPanel.Dock="Top" ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab}"
+                 Focusable="False" BorderThickness="0" Background="Transparent" Margin="0,0,0,1"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 PreviewMouseDown="TabStrip_PreviewMouseDown">
+            <ListBox.Style>
+                <Style TargetType="ListBox">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Tabs.Count}" Value="1">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ListBox.Style>
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="ToolTip" Value="{Binding Path}" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem">
+                                <Border x:Name="Chip" Background="#E3E7EF" BorderBrush="#C9CFDB" BorderThickness="1,1,1,0"
+                                        CornerRadius="4,4,0,0" Padding="10,2" Margin="0,0,2,0">
+                                    <TextBlock x:Name="Label" Text="{Binding Title}" MaxWidth="160" TextTrimming="CharacterEllipsis" />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="Chip" Property="Background" Value="White" />
+                                        <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
+                                    </Trigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Chip" Property="BorderBrush" Value="#2F5AA8" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListBox.ItemContainerStyle>
+        </ListBox>
+
         <!-- Current path; highlighted on the active panel. Editable: type a path and press Enter. -->
         <TextBox x:Name="PathBox" DockPanel.Dock="Top" Text="{Binding CurrentPath, Mode=OneWay}" Padding="4,2"
                  BorderThickness="0" FontWeight="SemiBold" KeyDown="PathBox_KeyDown">
