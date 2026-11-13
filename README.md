@@ -43,7 +43,8 @@ Settings are stored in `%AppData%\ChickenCommander\settings.json` and kept when 
 ## Features
 
 **Panels & navigation**
-- Two side-by-side panels with drive selector, free space, editable path bar and status line
+- Two side-by-side panels with drive selector, free space, path bar and status line
+- **Clickable path bar**: click any folder in the path to jump back to it (also inside archives and on servers); click after the path or press `Ctrl+L` to type one
 - **Folder tabs** in each panel: close one with its `×`, a middle-click or `Ctrl+W`; right-click a tab to close it, close the others or duplicate it. Tabs, panels, window size and hotlist are remembered between sessions
 - **Back / forward history** per tab and a recent-folders menu
 - **Directory hotlist** for favourite folders

@@ -38,10 +38,65 @@ public partial class FilePanel : UserControl
     private void DriveBox_DropDownClosed(object? sender, EventArgs e) =>
         Dispatcher.BeginInvoke(FocusList, DispatcherPriority.Input);
 
+    /// <summary>Ctrl+L or a click after the path: the path bar becomes a text box to type a path into.</summary>
     public void FocusPathBox()
     {
+        PathBox.Text = ViewModel?.CurrentPath ?? string.Empty;
+        Breadcrumb.Visibility = Visibility.Hidden; // keeps its height, so the layout does not jump
+        PathBox.Visibility = Visibility.Visible;
         PathBox.Focus();
         PathBox.SelectAll();
+    }
+
+    private void ShowBreadcrumb()
+    {
+        PathBox.Visibility = Visibility.Collapsed;
+        Breadcrumb.Visibility = Visibility.Visible;
+    }
+
+    private void PathBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => ShowBreadcrumb();
+
+    /// <summary>Rebuilds the clickable path: one link per folder, separated by "\" (or "/" on servers).</summary>
+    private void BuildBreadcrumb()
+    {
+        CrumbPanel.Children.Clear();
+        var path = ViewModel?.CurrentPath ?? string.Empty;
+        var separator = path.Contains("://", StringComparison.Ordinal) ? "/" : "\\";
+        var segments = PathHelper.Segments(path);
+        for (var i = 0; i < segments.Count; i++)
+        {
+            if (i > 0) CrumbPanel.Children.Add(new TextBlock { Text = separator, Opacity = 0.6, Margin = new Thickness(1, 0, 1, 0) });
+            var segment = segments[i];
+            var isLast = i == segments.Count - 1;
+            var link = new TextBlock { Text = segment.Label, Tag = segment, Cursor = isLast ? Cursors.IBeam : Cursors.Hand };
+            if (!isLast)
+            {
+                link.ToolTip = segment.Path;
+                link.MouseEnter += (_, _) => link.TextDecorations = TextDecorations.Underline;
+                link.MouseLeave += (_, _) => link.TextDecorations = null;
+            }
+            CrumbPanel.Children.Add(link);
+        }
+        // Long paths: keep the end (the current folder) in view.
+        Dispatcher.BeginInvoke(CrumbScroller.ScrollToRightEnd, DispatcherPriority.Loaded);
+    }
+
+    private void Breadcrumb_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        var vm = ViewModel;
+        if (vm is null) return;
+        var segments = PathHelper.Segments(vm.CurrentPath);
+        // A folder before the current one: go there, with the cursor on the folder we came from.
+        if (e.OriginalSource is TextBlock { Tag: PathSegment segment } && segments.Count > 0 && segment != segments[^1])
+        {
+            var index = segments.ToList().IndexOf(segment);
+            var cameFrom = index >= 0 && index + 1 < segments.Count ? segments[index + 1].Label : null;
+            if (vm.Navigate(segment.Path, cameFrom)) FocusList();
+            return;
+        }
+        // The current folder or the empty space after the path: type a path.
+        FocusPathBox();
     }
 
     /// <summary>Home / End: first or last row (the DataGrid's own Home/End only move between columns).</summary>
@@ -66,8 +121,22 @@ public partial class FilePanel : UserControl
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.OldValue is FilePanelViewModel oldVm) oldVm.FocusRequested -= OnFocusRequested;
-        if (e.NewValue is FilePanelViewModel newVm) newVm.FocusRequested += OnFocusRequested;
+        if (e.OldValue is FilePanelViewModel oldVm)
+        {
+            oldVm.FocusRequested -= OnFocusRequested;
+            oldVm.PropertyChanged -= OnViewModelPropertyChanged;
+        }
+        if (e.NewValue is FilePanelViewModel newVm)
+        {
+            newVm.FocusRequested += OnFocusRequested;
+            newVm.PropertyChanged += OnViewModelPropertyChanged;
+        }
+        BuildBreadcrumb();
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(FilePanelViewModel.CurrentPath)) BuildBreadcrumb();
     }
 
     private void OnFocusRequested(FileItemViewModel? item)
@@ -200,7 +269,7 @@ public partial class FilePanel : UserControl
     }
 
     /// <summary>Screen point just under the path bar, where popup menus (hotlist, history) appear.</summary>
-    public UIElement MenuAnchor => PathBox;
+    public UIElement MenuAnchor => Breadcrumb;
 
     private static int IndexOf(IReadOnlyList<FileItemViewModel> list, FileItemViewModel item)
     {

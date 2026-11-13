@@ -109,6 +109,27 @@ public class PathHelperTests
         Assert.Equal(@"E:\x", PathHelper.Resolve(@"C:\a", @"E:\x"));
         Assert.Equal(@"C:\a", PathHelper.Resolve(@"C:\a", "   "));
     }
+
+    [Fact]
+    public void Splits_local_path_into_clickable_segments()
+    {
+        var s = PathHelper.Segments(@"D:\Chicken Commander\demo\Photos\2025 Trip");
+        Assert.Equal(["D:", "Chicken Commander", "demo", "Photos", "2025 Trip"], s.Select(x => x.Label));
+        Assert.Equal([@"D:\", @"D:\Chicken Commander", @"D:\Chicken Commander\demo", @"D:\Chicken Commander\demo\Photos", @"D:\Chicken Commander\demo\Photos\2025 Trip"], s.Select(x => x.Path));
+    }
+
+    [Fact]
+    public void Segments_of_drive_root_share_archive_and_server()
+    {
+        Assert.Equal([new PathSegment("C:", @"C:\")], PathHelper.Segments(@"C:\"));
+        Assert.Equal([@"\\srv\share", @"\\srv\share\docs"], PathHelper.Segments(@"\\srv\share\docs").Select(x => x.Path));
+        Assert.Equal(@"D:\a\b.zip\inner", PathHelper.Segments(@"D:\a\b.zip\inner")[^1].Path);
+        var remote = PathHelper.Segments("sftp://myserver/home/user");
+        Assert.Equal(["sftp://myserver", "home", "user"], remote.Select(x => x.Label));
+        Assert.Equal(["sftp://myserver/", "sftp://myserver/home", "sftp://myserver/home/user"], remote.Select(x => x.Path));
+        Assert.Equal(["sftp://myserver/"], PathHelper.Segments("sftp://myserver/").Select(x => x.Path));
+        Assert.Empty(PathHelper.Segments(""));
+    }
 }
 
 public class DirectoryReaderTests : IDisposable

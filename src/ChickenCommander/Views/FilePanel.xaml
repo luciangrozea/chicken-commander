@@ -79,9 +79,29 @@
             </ListBox.ItemContainerStyle>
         </ListBox>
 
-        <!-- Current path; highlighted on the active panel. Editable: type a path and press Enter. -->
-        <TextBox x:Name="PathBox" DockPanel.Dock="Top" Text="{Binding CurrentPath, Mode=OneWay}" Padding="4,2"
-                 BorderThickness="0" FontWeight="SemiBold" KeyDown="PathBox_KeyDown">
+        <!-- Current path; highlighted on the active panel. Each folder in it can be clicked to go there;
+             a click after the last folder (or Ctrl+L) turns it into a text box: type a path and press Enter. -->
+        <Grid DockPanel.Dock="Top">
+        <Border x:Name="Breadcrumb" Padding="4,2" Cursor="IBeam"
+                MouseLeftButtonUp="Breadcrumb_MouseLeftButtonUp" ToolTip="Click a folder to go there · click after the path to type one (Ctrl+L)">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="{DynamicResource PanelHeaderInactiveBrush}" />
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource PanelHeaderInactiveTextBrush}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource PanelHeaderActiveBrush}" />
+                            <Setter Property="TextElement.Foreground" Value="{DynamicResource PanelHeaderActiveTextBrush}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <ScrollViewer x:Name="CrumbScroller" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Focusable="False">
+                <StackPanel x:Name="CrumbPanel" Orientation="Horizontal" TextElement.FontWeight="SemiBold" />
+            </ScrollViewer>
+        </Border>
+        <TextBox x:Name="PathBox" Text="{Binding CurrentPath, Mode=OneWay}" Padding="4,2" Visibility="Collapsed"
+                 BorderThickness="0" FontWeight="SemiBold" KeyDown="PathBox_KeyDown" LostKeyboardFocus="PathBox_LostKeyboardFocus">
             <TextBox.Style>
                 <Style TargetType="TextBox">
                     <Setter Property="Background" Value="{DynamicResource PanelHeaderInactiveBrush}" />
@@ -106,6 +126,7 @@
                 </Style>
             </TextBox.Style>
         </TextBox>
+        </Grid>
 
         <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" Padding="4,2" Background="{DynamicResource ChromeBrush}"
                    TextTrimming="CharacterEllipsis" />
