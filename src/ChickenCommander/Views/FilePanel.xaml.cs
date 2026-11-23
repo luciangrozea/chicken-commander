@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -202,8 +203,12 @@ public partial class FilePanel : UserControl
     private void Grid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var vm = ViewModel;
-        if (vm is null || ItemAt(e.OriginalSource) is not { } item) return;
+        if (vm is null) return;
         var mods = Keyboard.Modifiers;
+        var item = ItemAt(e.OriginalSource);
+        // Remember the press: moving the mouse far enough with the button down starts a drag rectangle.
+        BeginPossibleMarquee(e, item, vm, mods);
+        if (item is null) return;
         if (mods.HasFlag(ModifierKeys.Shift))
         {
             vm.MarkRange(anchor ?? vm.CurrentItem ?? item, item, keepOthers: mods.HasFlag(ModifierKeys.Control));
@@ -221,6 +226,194 @@ public partial class FilePanel : UserControl
             // A plain click selects only the clicked item, as in Explorer.
             vm.MarkAll(false);
         }
+    }
+
+    // ---- Drag rectangle (marquee) selection ---------------------------------------------------
+
+    /// <summary>Where the left button went down (null: no possible drag), in list coordinates.</summary>
+    private Point? pressPoint;
+    /// <summary>The press position as a fractional row index, so it stays put while the list scrolls.</summary>
+    private double pressRow;
+    private bool pressOnEmptySpace;
+    private bool marqueeActive;
+    private HashSet<FileItemViewModel> marksBeforeMarquee = [];
+    private readonly DispatcherTimer marqueeScrollTimer = new() { Interval = TimeSpan.FromMilliseconds(60) };
+
+    private void BeginPossibleMarquee(MouseButtonEventArgs e, FileItemViewModel? item, FilePanelViewModel vm, ModifierKeys mods)
+    {
+        pressPoint = null;
+        if (e.ClickCount != 1 || mods.HasFlag(ModifierKeys.Shift) || e.OriginalSource is not DependencyObject d) return;
+        // Not on the column headers or the scroll bar.
+        if (FindParent<System.Windows.Controls.Primitives.ScrollBar>(d) is not null
+            || FindParent<System.Windows.Controls.Primitives.DataGridColumnHeader>(d) is not null) return;
+        if (ListGeometry() is not { } g) return;
+        var p = CursorInList();
+        if (p.Y < g.RowsTop) return;
+        pressPoint = p;
+        pressRow = g.RowAt(p.Y);
+        pressOnEmptySpace = item is null;
+        // With Ctrl the rectangle adds to the marks that were there before this press.
+        marksBeforeMarquee = mods.HasFlag(ModifierKeys.Control) ? vm.MarkedItems.ToHashSet() : [];
+    }
+
+    private void Grid_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (pressPoint is not { } start || e.LeftButton != MouseButtonState.Pressed)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed) pressPoint = null;
+            return;
+        }
+        var p = CursorInList();
+        if (!marqueeActive)
+        {
+            if (Math.Abs(p.X - start.X) < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(p.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+            marqueeActive = true;
+            Grid.CaptureMouse();
+            Marquee.Visibility = Visibility.Visible;
+            if (!marqueeScrollTimerHooked)
+            {
+                marqueeScrollTimer.Tick += (_, _) => MarqueeAutoScroll();
+                marqueeScrollTimerHooked = true;
+            }
+            marqueeScrollTimer.Start();
+        }
+        e.Handled = true; // the DataGrid would otherwise drag its own selection along
+        UpdateMarquee(p);
+    }
+
+    private bool marqueeScrollTimerHooked;
+
+    /// <summary>
+    /// The real cursor position over the list. WPF's own mouse position can still be the old one when a click
+    /// arrives right after the pointer jumped (fast clicks, a window just activated), which would look like a drag.
+    /// </summary>
+    private Point CursorInList()
+    {
+        GetCursorPos(out var pt);
+        return Grid.PointFromScreen(new Point(pt.X, pt.Y));
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X, Y; }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out NativePoint point);
+
+    private void Grid_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (marqueeActive)
+        {
+            EndMarquee();
+            e.Handled = true;
+        }
+        else if (pressPoint is not null && pressOnEmptySpace && !Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            // A click on empty space clears the selection, as in Explorer.
+            ViewModel?.MarkAll(false);
+        }
+        pressPoint = null;
+    }
+
+    private void Grid_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (marqueeActive && !Grid.IsMouseCaptured) EndMarquee();
+    }
+
+    private void EndMarquee()
+    {
+        marqueeActive = false;
+        marqueeScrollTimer.Stop();
+        Marquee.Visibility = Visibility.Collapsed;
+        pressPoint = null;
+        if (Grid.IsMouseCaptured) Grid.ReleaseMouseCapture();
+        FocusList();
+    }
+
+    /// <summary>Near the top or bottom edge the list scrolls, so the rectangle can grow past what is visible.</summary>
+    private void MarqueeAutoScroll()
+    {
+        if (!marqueeActive || ListGeometry() is not { } g) return;
+        var p = CursorInList();
+        if (p.Y < g.RowsTop) g.Scroller.LineUp();
+        else if (p.Y > Grid.ActualHeight - 4) g.Scroller.LineDown();
+        else return;
+        Grid.UpdateLayout();
+        UpdateMarquee(p);
+    }
+
+    private void UpdateMarquee(Point p)
+    {
+        if (ViewModel is not { } vm || ListGeometry() is not { } g || pressPoint is not { } start) return;
+        var currentRow = g.RowAt(Math.Clamp(p.Y, g.RowsTop, Grid.ActualHeight - 1));
+
+        // Draw: the start row may have scrolled out of view; the rectangle is clipped to the list.
+        var startY = g.RowsTop + (pressRow - g.Scroller.VerticalOffset) * g.RowHeight;
+        var top = Math.Max(g.RowsTop, Math.Min(startY, p.Y));
+        var bottom = Math.Min(Grid.ActualHeight, Math.Max(startY, p.Y));
+        var left = Math.Max(0, Math.Min(start.X, p.X));
+        var right = Math.Min(Grid.ActualWidth, Math.Max(start.X, p.X));
+        Canvas.SetLeft(Marquee, left);
+        Canvas.SetTop(Marquee, top);
+        Marquee.Width = Math.Max(0, right - left);
+        Marquee.Height = Math.Max(0, bottom - top);
+
+        // Select every row the rectangle touches.
+        var last = vm.Items.Count - 1;
+        var a = (int)Math.Floor(Math.Min(pressRow, currentRow));
+        var b = (int)Math.Floor(Math.Max(pressRow, currentRow));
+        if (a > last || b < 0 || last < 0)
+        {
+            vm.ApplyMarquee(0, -1, marksBeforeMarquee); // the rectangle touches no row: only the marks from before
+            return;
+        }
+        a = Math.Clamp(a, 0, last);
+        b = Math.Clamp(b, 0, last);
+        vm.ApplyMarquee(a, b, marksBeforeMarquee);
+        // The cursor follows the end of the rectangle (without moving the Shift anchor).
+        var end = vm.Items[(int)Math.Clamp(Math.Floor(currentRow), 0, last)];
+        if (!ReferenceEquals(vm.CurrentItem, end))
+        {
+            keepAnchorOnce = true;
+            vm.CurrentItem = end;
+            Grid.ScrollIntoView(end);
+        }
+    }
+
+    /// <summary>Row height, where the rows start and the scroll position: enough to turn a Y coordinate into a row index.</summary>
+    private sealed record ListGeom(double RowsTop, double RowHeight, ScrollViewer Scroller)
+    {
+        /// <summary>Fractional row index under a Y position (rows scroll by whole items).</summary>
+        public double RowAt(double y) => Scroller.VerticalOffset + (y - RowsTop) / RowHeight;
+    }
+
+    private ListGeom? ListGeometry()
+    {
+        var scroller = FindChild<ScrollViewer>(Grid);
+        if (scroller is null || ViewModel is not { Items.Count: > 0 } vm) return null;
+        // Any realized row tells the row height and, with its index, where row 0 would be.
+        for (var i = (int)scroller.VerticalOffset; i < vm.Items.Count; i++)
+        {
+            if (Grid.ItemContainerGenerator.ContainerFromIndex(i) is DataGridRow { ActualHeight: > 0 } row)
+            {
+                var y = row.TranslatePoint(new Point(0, 0), Grid).Y;
+                var rowsTop = y - (i - scroller.VerticalOffset) * row.ActualHeight;
+                return new ListGeom(rowsTop, row.ActualHeight, scroller);
+            }
+            if (i > scroller.VerticalOffset + 50) break;
+        }
+        return null;
+    }
+
+    private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is T found) return found;
+            if (FindChild<T>(child) is { } deeper) return deeper;
+        }
+        return null;
     }
 
     private void Grid_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)

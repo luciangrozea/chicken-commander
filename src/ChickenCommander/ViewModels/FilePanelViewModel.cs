@@ -320,6 +320,24 @@ public partial class FilePanelViewModel : ObservableObject
         });
     }
 
+    /// <summary>
+    /// Drag rectangle: rows <paramref name="first"/>..<paramref name="last"/> are marked, every other row goes back
+    /// to how it was when the drag started (<paramref name="markedBefore"/>: empty for a plain drag, the old marks with Ctrl).
+    /// <paramref name="first"/> greater than <paramref name="last"/> means the rectangle touches no row.
+    /// </summary>
+    public void ApplyMarquee(int first, int last, IReadOnlySet<FileItemViewModel> markedBefore)
+    {
+        ChangeMarks(() =>
+        {
+            for (var i = 0; i < Items.Count; i++)
+            {
+                var item = Items[i];
+                var inside = i >= first && i <= last && !item.IsParentLink;
+                item.IsMarked = inside || markedBefore.Contains(item);
+            }
+        });
+    }
+
     public int IndexOfItem(FileItemViewModel item)
     {
         for (var i = 0; i < Items.Count; i++)

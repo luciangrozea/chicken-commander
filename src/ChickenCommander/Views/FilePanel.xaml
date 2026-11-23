@@ -131,6 +131,8 @@
         <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" Padding="4,2" Background="{DynamicResource ChromeBrush}"
                    TextTrimming="CharacterEllipsis" />
 
+        <!-- The list, with a layer on top for the drag rectangle (press the left button and drag to select, like in Explorer) -->
+        <Grid>
         <DataGrid x:Name="Grid"
                   ItemsSource="{Binding Items}"
                   SelectedItem="{Binding CurrentItem, Mode=TwoWay}"
@@ -147,6 +149,9 @@
                   PreviewMouseLeftButtonDown="Grid_PreviewMouseLeftButtonDown"
                   PreviewMouseRightButtonDown="Grid_PreviewMouseRightButtonDown"
                   PreviewMouseRightButtonUp="Grid_PreviewMouseRightButtonUp"
+                  PreviewMouseMove="Grid_PreviewMouseMove"
+                  PreviewMouseLeftButtonUp="Grid_PreviewMouseLeftButtonUp"
+                  LostMouseCapture="Grid_LostMouseCapture"
                   PreviewKeyDown="Grid_PreviewKeyDown"
                   SelectionChanged="Grid_SelectionChanged">
             <DataGrid.Resources>
@@ -286,5 +291,14 @@
                 <DataGridTextColumn Header="Attr" Binding="{Binding Attr}" Width="54" SortMemberPath="Attr" />
             </DataGrid.Columns>
         </DataGrid>
+        <Canvas x:Name="MarqueeLayer" IsHitTestVisible="False" ClipToBounds="True">
+            <Rectangle x:Name="Marquee" Visibility="Collapsed" StrokeThickness="1"
+                       Stroke="{DynamicResource CursorBrush}">
+                <Rectangle.Fill>
+                    <SolidColorBrush Color="{DynamicResource CursorColor}" Opacity="0.25" />
+                </Rectangle.Fill>
+            </Rectangle>
+        </Canvas>
+        </Grid>
     </DockPanel>
 </UserControl>

@@ -81,6 +81,7 @@ Settings are stored in `%AppData%\ChickenCommander\settings.json` and kept when 
 
 **Selection, clipboard & right-click**
 - Explorer-style selection: `Ctrl`+click adds or removes a file, `Shift`+click selects a range, `Ctrl+Shift`+click adds a range, `Shift`+arrows / `PgUp` / `PgDn` / `Home` / `End` from the keyboard
+- **Drag to select**: hold the left mouse button and draw a rectangle over files and folders (with `Ctrl` to add to the selection); the list scrolls when you reach its edge
 - **Clipboard**: `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste files, and work together with Windows Explorer both ways
 - **Right-click menu from Windows Explorer** on files and folders: Open with, Send to, Properties and all installed extensions (7-Zip, antivirus…); Cut, Copy, Paste, Rename and Delete run through Chicken Commander. Right-click on empty space for Paste, New folder and folder Properties; menu key or `Shift+F10` from the keyboard
 
