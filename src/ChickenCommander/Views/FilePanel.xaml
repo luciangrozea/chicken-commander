@@ -143,7 +143,12 @@
                   BorderThickness="1" BorderBrush="{DynamicResource AppBorderBrush}" Background="{DynamicResource SurfaceBrush}" RowBackground="{DynamicResource SurfaceBrush}"
                   FontSize="{DynamicResource ListFontSize}" Foreground="{DynamicResource TextBrush}"
                   Sorting="Grid_Sorting"
-                  MouseDoubleClick="Grid_MouseDoubleClick">
+                  MouseDoubleClick="Grid_MouseDoubleClick"
+                  PreviewMouseLeftButtonDown="Grid_PreviewMouseLeftButtonDown"
+                  PreviewMouseRightButtonDown="Grid_PreviewMouseRightButtonDown"
+                  PreviewMouseRightButtonUp="Grid_PreviewMouseRightButtonUp"
+                  PreviewKeyDown="Grid_PreviewKeyDown"
+                  SelectionChanged="Grid_SelectionChanged">
             <DataGrid.Resources>
                 <!-- Cursor colours: strong on the active panel, faint on the inactive one -->
                 <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="{DynamicResource CursorColor}" />

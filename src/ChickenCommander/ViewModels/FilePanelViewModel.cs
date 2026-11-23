@@ -116,7 +116,7 @@ public partial class FilePanelViewModel : ObservableObject
         }
         foreach (var item in list) item.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(FileItemViewModel.IsMarked)) UpdateStatus();
+            if (e.PropertyName == nameof(FileItemViewModel.IsMarked) && !changingMarks) UpdateStatus();
         };
 
         if (ActiveTab is null)
@@ -281,18 +281,64 @@ public partial class FilePanelViewModel : ObservableObject
     {
         var matcher = new WildcardMask(mask);
         // Masks act on files only; folders are marked individually (Insert/Space) or with Ctrl+A.
-        foreach (var item in Items.Where(i => !i.Entry.IsDirectory && matcher.IsMatch(i.Entry.Name)))
-            item.IsMarked = mark;
+        ChangeMarks(() =>
+        {
+            foreach (var item in Items.Where(i => !i.Entry.IsDirectory && matcher.IsMatch(i.Entry.Name)))
+                item.IsMarked = mark;
+        });
     }
 
-    public void MarkAll(bool mark)
+    public void MarkAll(bool mark) => ChangeMarks(() =>
     {
         foreach (var item in Items.Where(i => !i.IsParentLink)) item.IsMarked = mark;
-    }
+    });
 
-    public void InvertMarks()
+    public void InvertMarks() => ChangeMarks(() =>
     {
         foreach (var item in Items.Where(i => !i.IsParentLink && !i.Entry.IsDirectory)) item.IsMarked = !item.IsMarked;
+    });
+
+    /// <summary>
+    /// Shift+click / Shift+arrows: marks everything between <paramref name="from"/> and <paramref name="to"/>.
+    /// Without <paramref name="keepOthers"/> (plain Shift) the marks outside the range are removed, like in Explorer;
+    /// with it (Ctrl+Shift) the range is added to the existing marks.
+    /// </summary>
+    public void MarkRange(FileItemViewModel from, FileItemViewModel to, bool keepOthers)
+    {
+        var a = IndexOfItem(from);
+        var b = IndexOfItem(to);
+        if (a < 0 || b < 0) return;
+        if (a > b) (a, b) = (b, a);
+        ChangeMarks(() =>
+        {
+            for (var i = 0; i < Items.Count; i++)
+            {
+                var item = Items[i];
+                if (i >= a && i <= b) item.IsMarked = !item.IsParentLink;
+                else if (!keepOthers) item.IsMarked = false;
+            }
+        });
+    }
+
+    public int IndexOfItem(FileItemViewModel item)
+    {
+        for (var i = 0; i < Items.Count; i++)
+            if (ReferenceEquals(Items[i], item)) return i;
+        return -1;
+    }
+
+    private bool changingMarks;
+
+    /// <summary>Changes many marks with one status-line update at the end (instead of one per item).</summary>
+    private void ChangeMarks(Action change)
+    {
+        changingMarks = true;
+        try { change(); }
+        finally
+        {
+            changingMarks = false;
+            UpdateStatus();
+        }
     }
 
     public void RequestFocus() => FocusRequested?.Invoke(CurrentItem);

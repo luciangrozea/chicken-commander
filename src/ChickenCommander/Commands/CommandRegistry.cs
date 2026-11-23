@@ -59,7 +59,11 @@ public static class CommandRegistry
         new("CreateChecksums", "Files", "Create checksums", [], "", w => w.Vm.CreateChecksumsCommand.Execute(null)),
         new("VerifyChecksums", "Files", "Verify checksums", [], "", w => w.Vm.VerifyChecksumsCommand.Execute(null)),
         new("CompareFiles", "Files", "Compare by content", ["Ctrl+Shift+C"], "", w => w.Vm.CompareFilesCommand.Execute(null)),
-        new("ShowOperations", "Files", "File operations window", ["Ctrl+Shift+O"], "", w => w.Vm.ShowOperationsCommand.Execute(null)),
+        new("CopyToClipboard", "Files", "Copy to clipboard", ["Ctrl+C"], "", w => w.Vm.CopyToClipboardCommand.Execute(null)),
+        new("CutToClipboard", "Files", "Cut to clipboard", ["Ctrl+X"], "", w => w.Vm.CutToClipboardCommand.Execute(null)),
+        new("Paste", "Files", "Paste from clipboard", ["Ctrl+V"], "", w => w.Vm.PasteCommand.Execute(null)),
+        new("ContextMenu", "Files", "Explorer context menu", ["Apps", "Shift+F10"], "", w => w.ShowContextMenuAtCursor()),
+        new("ShowOperations", "Files", "File operations window", ["Ctrl+Shift+O"],"", w => w.Vm.ShowOperationsCommand.Execute(null)),
 
         // Marking
         new("MarkItem", "Marking", "Mark item and move down", ["Insert"], "", w => w.MarkAndMoveDown()),

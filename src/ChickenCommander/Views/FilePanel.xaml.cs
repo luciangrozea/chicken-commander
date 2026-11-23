@@ -185,6 +185,117 @@ public partial class FilePanel : UserControl
             e.Column.SortDirection = vm.Sort.Descending ? ListSortDirection.Descending : ListSortDirection.Ascending;
     }
 
+    // ---- Explorer-style selection: Ctrl+click, Shift+click, Shift+arrows ---------------------
+
+    /// <summary>Where a Shift range starts: the item last clicked or reached without Shift.</summary>
+    private FileItemViewModel? anchor;
+
+    /// <summary>
+    /// Raised on right-click (or the menu key) with a point relative to this panel and the item under it
+    /// (null on empty space): the main window shows the Explorer menu for the selection.
+    /// </summary>
+    public event Action<FilePanel, Point, FileItemViewModel?>? ContextMenuRequested;
+
+    private FileItemViewModel? ItemAt(object originalSource) =>
+        originalSource is DependencyObject d && FindParent<DataGridRow>(d) is { Item: FileItemViewModel item } ? item : null;
+
+    private void Grid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var vm = ViewModel;
+        if (vm is null || ItemAt(e.OriginalSource) is not { } item) return;
+        var mods = Keyboard.Modifiers;
+        if (mods.HasFlag(ModifierKeys.Shift))
+        {
+            vm.MarkRange(anchor ?? vm.CurrentItem ?? item, item, keepOthers: mods.HasFlag(ModifierKeys.Control));
+            MoveCursorTo(item, keepAnchor: true);
+            e.Handled = true;
+        }
+        else if (mods.HasFlag(ModifierKeys.Control))
+        {
+            vm.ToggleMark(item);
+            MoveCursorTo(item, keepAnchor: false);
+            e.Handled = true;
+        }
+        else if (e.ClickCount == 1 && vm.MarkedItems.Any())
+        {
+            // A plain click selects only the clicked item, as in Explorer.
+            vm.MarkAll(false);
+        }
+    }
+
+    private void Grid_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var vm = ViewModel;
+        if (vm is null) return;
+        e.Handled = true; // the DataGrid would otherwise move its own selection
+        if (ItemAt(e.OriginalSource) is not { } item) return;
+        // Right-click on a marked item keeps the marks (the menu acts on all of them);
+        // on any other item it selects only that one, as in Explorer.
+        if (!item.IsMarked && vm.MarkedItems.Any()) vm.MarkAll(false);
+        MoveCursorTo(item, keepAnchor: false);
+    }
+
+    private void Grid_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        var item = ItemAt(e.OriginalSource);
+        ContextMenuRequested?.Invoke(this, e.GetPosition(this), item);
+    }
+
+    /// <summary>Menu key / Shift+F10: the menu opens next to the cursor row.</summary>
+    public void RequestContextMenuAtCursor()
+    {
+        var vm = ViewModel;
+        var item = vm?.CurrentItem;
+        var point = new Point(40, 40);
+        if (item is not null && Grid.ItemContainerGenerator.ContainerFromItem(item) is DataGridRow row)
+            point = row.TranslatePoint(new Point(40, row.ActualHeight), this);
+        ContextMenuRequested?.Invoke(this, point, item);
+    }
+
+    private void Grid_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var vm = ViewModel;
+        if (vm is null || !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) return;
+        if (vm.CurrentItem is not { } current || vm.Items.Count == 0) return;
+        var index = vm.IndexOfItem(current);
+        var page = Math.Max(1, (int)(Grid.ActualHeight / Math.Max(16, Grid.RowHeight is > 0 and var h ? h : 20)) - 2);
+        int target = e.Key switch
+        {
+            Key.Up => index - 1,
+            Key.Down => index + 1,
+            Key.PageUp => index - page,
+            Key.PageDown => index + page,
+            Key.Home => 0,
+            Key.End => vm.Items.Count - 1,
+            _ => int.MinValue,
+        };
+        if (target == int.MinValue) return;
+        e.Handled = true;
+        target = Math.Clamp(target, 0, vm.Items.Count - 1);
+        var item = vm.Items[target];
+        vm.MarkRange(anchor ?? current, item, keepOthers: Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
+        MoveCursorTo(item, keepAnchor: true);
+    }
+
+    private void Grid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // Moving without Shift (arrows, clicks, navigation) sets where the next Shift range starts.
+        if (!keepAnchorOnce && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) anchor = ViewModel?.CurrentItem;
+        keepAnchorOnce = false;
+    }
+
+    private bool keepAnchorOnce;
+
+    private void MoveCursorTo(FileItemViewModel item, bool keepAnchor)
+    {
+        if (ViewModel is not { } vm) return;
+        keepAnchorOnce = keepAnchor && !ReferenceEquals(vm.CurrentItem, item);
+        if (!keepAnchor) anchor = item;
+        vm.CurrentItem = item;
+        FocusItem(item);
+    }
+
     private void Grid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is DependencyObject d && FindParent<DataGridRow>(d) is not null)

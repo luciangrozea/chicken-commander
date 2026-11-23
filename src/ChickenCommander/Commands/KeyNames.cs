@@ -56,7 +56,20 @@ public static class KeyNames
     /// While a text box has focus, only gestures that cannot be typed text are treated as commands:
     /// anything with Ctrl or Alt, and function keys / Tab.
     /// </summary>
-    public static bool AllowedInTextBox(Key key, ModifierKeys modifiers) =>
-        modifiers.HasFlag(ModifierKeys.Control) || modifiers.HasFlag(ModifierKeys.Alt)
-        || key is >= Key.F1 and <= Key.F24 || key == Key.Tab;
+    public static bool AllowedInTextBox(Key key, ModifierKeys modifiers)
+    {
+        // Text editing keys belong to the text box: Ctrl+A selects the text, Ctrl+C/X/V copy and paste it, etc.
+        if (IsTextEditingKey(key, modifiers)) return false;
+        return modifiers.HasFlag(ModifierKeys.Control) || modifiers.HasFlag(ModifierKeys.Alt)
+            || key is >= Key.F1 and <= Key.F24 || key == Key.Tab;
+    }
+
+    private static bool IsTextEditingKey(Key key, ModifierKeys modifiers)
+    {
+        if (modifiers.HasFlag(ModifierKeys.Alt)) return false;
+        if (modifiers == ModifierKeys.Shift) return key is Key.Insert or Key.Delete;
+        if (!modifiers.HasFlag(ModifierKeys.Control)) return false;
+        return key is Key.A or Key.C or Key.X or Key.V or Key.Z or Key.Y or Key.Insert
+            or Key.Left or Key.Right or Key.Home or Key.End or Key.Back or Key.Delete;
+    }
 }

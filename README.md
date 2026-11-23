@@ -79,6 +79,11 @@ Settings are stored in `%AppData%\ChickenCommander\settings.json` and kept when 
 - **Button bar** with icons for any command, plus your own programs with parameters (`%P` folder, `%N` name, `%F` full path, `%S` marked files, `%T` other panel)
 - File list font size, Recycle Bin and delete-confirmation preferences
 
+**Selection, clipboard & right-click**
+- Explorer-style selection: `Ctrl`+click adds or removes a file, `Shift`+click selects a range, `Ctrl+Shift`+click adds a range, `Shift`+arrows / `PgUp` / `PgDn` / `Home` / `End` from the keyboard
+- **Clipboard**: `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste files, and work together with Windows Explorer both ways
+- **Right-click menu from Windows Explorer** on files and folders: Open with, Send to, Properties and all installed extensions (7-Zip, antivirus…); Cut, Copy, Paste, Rename and Delete run through Chicken Commander. Right-click on empty space for Paste, New folder and folder Properties; menu key or `Shift+F10` from the keyboard
+
 **Marking & command line**
 - Insert / Space, mark by mask (`*.txt;*.md | *.bak`), invert, select all
 - Built-in command line: start typing anywhere and press Enter; `cd` navigates the active panel
@@ -109,6 +114,8 @@ Settings are stored in `%AppData%\ChickenCommander\settings.json` and kept when 
 | `Alt+F5` | Pack | `Alt+F9` | Unpack |
 | `Ctrl+PgDn` | Open archive | `Ctrl+N` / `Ctrl+Shift+N` | Connect / disconnect server |
 | `Ctrl+,` | Settings | `F1` | Current shortcuts |
+| `Ctrl+C` / `Ctrl+X` | Copy / cut to clipboard | `Ctrl+V` | Paste |
+| `Ctrl`+click / `Shift`+click | Select / select range | Menu key / `Shift+F10` | Right-click menu |
 
 These are the defaults; all of them can be changed in Settings → Keyboard.
 

@@ -50,6 +50,7 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
         {
             panel.GotKeyboardFocus += (_, _) => vm.ActivePanel = panel.ViewModel!;
             panel.OpenRequested += _ => vm.OpenCurrent();
+            panel.ContextMenuRequested += OnContextMenuRequested;
             panel.PathEntered += (p, text) =>
             {
                 vm.ActivePanel = p.ViewModel!;
@@ -354,6 +355,158 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
         }
     }
 
+    // ---- Right-click menu --------------------------------------------------------------------
+
+    /// <summary>Menu key / Shift+F10: the menu of the item under the cursor.</summary>
+    internal void ShowContextMenuAtCursor() => ActivePanelView.RequestContextMenuAtCursor();
+
+    /// <summary>
+    /// Right-click on files: the Explorer menu for the selection (local drives), a short menu of our own
+    /// inside archives and on servers, and a folder menu (Paste, New folder…) on empty space or "..".
+    /// </summary>
+    private void OnContextMenuRequested(FilePanel view, Point point, FileItemViewModel? item)
+    {
+        if (view.ViewModel is not { } panel) return;
+        vm.ActivePanel = panel;
+        if (item is null || item.IsParentLink)
+        {
+            ShowPopupMenu(view, point, FolderMenuEntries(panel));
+            return;
+        }
+        var selection = panel.SelectionOrCurrent();
+        if (selection.Count == 0) return;
+        if (!panel.IsLocal)
+        {
+            ShowPopupMenu(view, point, VirtualItemMenuEntries(panel));
+            return;
+        }
+
+        var screen = view.PointToScreen(point);
+        var handledByApp = false;
+        var shown = ShellContextMenu.Show(this, selection.Select(i => i.Entry.FullPath).ToList(), screen, verb =>
+        {
+            handledByApp = HandleShellVerb(verb, panel, selection);
+            return handledByApp;
+        });
+        if (!shown)
+        {
+            ShowPopupMenu(view, point, FallbackItemMenuEntries(panel, selection));
+            return;
+        }
+        // A shell command (7-Zip, "Send to", Properties…) may have changed files: reload, keeping marks and cursor.
+        if (!handledByApp) Dispatcher.BeginInvoke(() =>
+        {
+            panel.Refresh();
+            if (!ReferenceEquals(panel, vm.InactivePanel) && string.Equals(vm.InactivePanel.CurrentPath, panel.CurrentPath, StringComparison.OrdinalIgnoreCase))
+                vm.InactivePanel.Refresh();
+        }, System.Windows.Threading.DispatcherPriority.Background);
+        view.FocusList();
+    }
+
+    /// <summary>Explorer verbs the app runs itself, so marks, refresh and confirmations behave like the F-keys.</summary>
+    private bool HandleShellVerb(string verb, FilePanelViewModel panel, IReadOnlyList<FileItemViewModel> selection)
+    {
+        switch (verb)
+        {
+            case "copy":
+                vm.PutOnClipboard(cut: false);
+                return true;
+            case "cut":
+                vm.PutOnClipboard(cut: true);
+                return true;
+            case "paste" when selection is [{ Entry.IsDirectory: true } folder]:
+                vm.PasteInto(folder.Entry.FullPath);
+                return true;
+            case "delete":
+                vm.DeleteCommand.Execute(null);
+                return true;
+            case "rename":
+                if (selection.Count > 1) vm.MultiRenameCommand.Execute(null);
+                else vm.RenameCommand.Execute(null);
+                return true;
+            case "open" when selection is [{ Entry.IsDirectory: true } dir]:
+                // Folders open in the panel, not in a new Explorer window.
+                panel.TryEnter(dir);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private List<MenuEntry> FolderMenuEntries(FilePanelViewModel panel)
+    {
+        var entries = new List<MenuEntry>();
+        if (panel.Location != LocationKind.Archive && FileClipboard.ContainsFiles())
+            entries.Add(new MenuEntry("_Paste", () => vm.PasteInto(panel.CurrentPath), Gesture("Paste")));
+        if (panel.Location != LocationKind.Archive)
+            entries.Add(new MenuEntry("_New folder...", () => vm.MakeDirectoryCommand.Execute(null), Gesture("MakeDirectory")));
+        if (entries.Count > 0) entries.Add(MenuEntry.Separator);
+        entries.Add(new MenuEntry("Select _all", () => panel.MarkAll(true), Gesture("SelectAll")));
+        entries.Add(new MenuEntry("_Refresh", () => vm.RefreshCommand.Execute(null), Gesture("Refresh")));
+        if (panel.IsLocal)
+        {
+            entries.Add(MenuEntry.Separator);
+            entries.Add(new MenuEntry("Open in _Explorer", () => StartInWorkingDirectory("explorer.exe", ".")));
+            entries.Add(new MenuEntry("_Command prompt here", () => StartInWorkingDirectory("cmd.exe", null)));
+            entries.Add(MenuEntry.Separator);
+            entries.Add(new MenuEntry("Pr_operties", () => ShellContextMenu.ShowProperties(this, panel.CurrentPath)));
+        }
+        return entries;
+    }
+
+    private List<MenuEntry> VirtualItemMenuEntries(FilePanelViewModel panel)
+    {
+        var entries = new List<MenuEntry>
+        {
+            new("_View", () => vm.ViewCommand.Execute(null), Gesture("View")),
+            new("_Copy to other panel...", () => vm.CopyCommand.Execute(null), Gesture("Copy")),
+        };
+        if (panel.Location == LocationKind.Remote)
+        {
+            entries.Add(new MenuEntry("Re_name...", () => vm.RenameCommand.Execute(null), Gesture("Rename")));
+            entries.Add(new MenuEntry("_Delete", () => vm.DeleteCommand.Execute(null), Gesture("Delete")));
+        }
+        return entries;
+    }
+
+    /// <summary>Used only when Windows cannot build its own menu for the selection.</summary>
+    private List<MenuEntry> FallbackItemMenuEntries(FilePanelViewModel panel, IReadOnlyList<FileItemViewModel> selection) =>
+    [
+        new("_Open", () => vm.OpenCurrent(), "Enter"),
+        MenuEntry.Separator,
+        new("Cu_t", () => vm.PutOnClipboard(cut: true), Gesture("CutToClipboard")),
+        new("_Copy", () => vm.PutOnClipboard(cut: false), Gesture("CopyToClipboard")),
+        new("_Paste", () => vm.PasteInto(selection is [{ Entry.IsDirectory: true } f] ? f.Entry.FullPath : panel.CurrentPath), Gesture("Paste")),
+        MenuEntry.Separator,
+        new("Rena_me...", () => vm.RenameCommand.Execute(null), Gesture("Rename")),
+        new("_Delete", () => vm.DeleteCommand.Execute(null), Gesture("Delete")),
+        MenuEntry.Separator,
+        new("P_roperties", () => ShellContextMenu.ShowProperties(this, selection[0].Entry.FullPath)),
+    ];
+
+    private string? Gesture(string commandId) =>
+        shortcuts.GesturesFor(commandId) is { Count: > 0 } g ? KeyNames.Display(g[0]) : null;
+
+    private void ShowPopupMenu(FilePanel view, Point point, IReadOnlyList<MenuEntry> entries)
+    {
+        // A zero-size rectangle at the click point: the menu opens right there (below and to the right of it).
+        var menu = new ContextMenu { PlacementTarget = view, Placement = PlacementMode.Bottom, PlacementRectangle = new Rect(point, new Size(0, 0)) };
+        foreach (var entry in entries)
+        {
+            if (entry.Action is null)
+            {
+                menu.Items.Add(new Separator());
+                continue;
+            }
+            var item = new MenuItem { Header = entry.Header, InputGestureText = entry.Hint ?? string.Empty };
+            var action = entry.Action;
+            item.Click += (_, _) => action();
+            menu.Items.Add(item);
+        }
+        menu.Closed += (_, _) => view.FocusList();
+        menu.IsOpen = true;
+    }
+
     // ---- Helpers used by commands ------------------------------------------------------------
 
     internal MainViewModel Vm => vm;
@@ -563,7 +716,8 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
                 menu.Items.Add(new Separator());
                 continue;
             }
-            var item = new MenuItem { Header = entry.Header, InputGestureText = entry.Hint ?? string.Empty };
+            // Headers here are folder names and paths: "_" is a real character, not an access key.
+            var item = new MenuItem { Header = entry.Header.Replace("_", "__"), InputGestureText = entry.Hint ?? string.Empty };
             var action = entry.Action;
             item.Click += (_, _) => action();
             menu.Items.Add(item);
