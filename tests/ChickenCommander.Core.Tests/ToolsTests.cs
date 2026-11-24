@@ -84,6 +84,68 @@ public class FileDocumentTests : TempFolderTest
         Assert.Equal(1, doc.LineCount);
         Assert.Equal("", doc.GetLine(0));
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Sparse_index_returns_every_line_in_any_order(bool trailingNewline)
+    {
+        // Thousands of lines span many checkpoints; some lines are long enough to force byte-based checkpoints.
+        var expected = Enumerable.Range(0, 5000)
+            .Select(i => i % 997 == 0 ? new string('x', 300_000) : $"line {i} ț")
+            .ToList();
+        var path = Write("many.txt", string.Join("\r\n", expected) + (trailingNewline ? "\r\n" : ""));
+        using var doc = FileDocument.Open(path);
+        Assert.Equal(expected.Count, doc.LineCount);
+        var rnd = new Random(1);
+        foreach (var i in Enumerable.Range(0, 3000).Select(_ => rnd.Next(expected.Count)).Concat([0, 4999, 997, 998, 996]))
+        {
+            var want = expected[i].Length > 65536 ? expected[i][..65536] : expected[i];
+            Assert.Equal(want, doc.GetLine(i));
+        }
+        Assert.Equal(4321, doc.FindLine("line 4321 ", 4000, matchCase: true));
+    }
+
+    [Fact]
+    public void Sparse_index_works_for_utf16_files()
+    {
+        var path = P("u16.txt");
+        var expected = Enumerable.Range(0, 1000).Select(i => $"rând {i}").ToList();
+        File.WriteAllText(path, string.Join("\n", expected), Encoding.Unicode);
+        using var doc = FileDocument.Open(path);
+        Assert.Equal(1000, doc.LineCount);
+        Assert.Equal("rând 0", doc.GetLine(0));
+        Assert.Equal("rând 640", doc.GetLine(640));
+        Assert.Equal("rând 999", doc.GetLine(999));
+    }
+
+    [Fact]
+    public void Binary_files_open_without_a_line_index()
+    {
+        var path = P("big.bin");
+        File.WriteAllBytes(path, Enumerable.Range(0, 100_000).Select(i => (byte)(i * 31)).ToArray());
+        using var doc = FileDocument.Open(path, indexLines: false);
+        Assert.False(doc.IsIndexed);
+        Assert.Throws<InvalidOperationException>(() => doc.GetLine(0));
+        Assert.StartsWith("00000000", doc.GetHexLine(0));
+        doc.EnsureIndexed();
+        Assert.True(doc.LineCount > 1);
+    }
+
+    [Fact]
+    public void FindBytes_searches_raw_bytes_across_chunks_and_wraps()
+    {
+        var path = P("hay.bin");
+        var data = new byte[3 * 1024 * 1024];
+        "NEEDLE"u8.CopyTo(data.AsSpan(1024 * 1024 - 3)); // straddles the first chunk boundary
+        "tail"u8.CopyTo(data.AsSpan(100));
+        File.WriteAllBytes(path, data);
+        using var doc = FileDocument.Open(path, indexLines: false);
+        Assert.Equal(1024 * 1024 - 3, doc.FindBytes("needle", 0, matchCase: false));
+        Assert.Equal(-1, doc.FindBytes("needle", 0, matchCase: true));
+        Assert.Equal(100, doc.FindBytes("tail", 2 * 1024 * 1024, matchCase: true)); // wrapped around
+        Assert.Equal(-1, doc.FindBytes("absent", 0, matchCase: false));
+    }
 }
 
 public class TextDiffTests

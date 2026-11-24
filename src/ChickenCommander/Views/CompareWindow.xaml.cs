@@ -21,17 +21,24 @@ public partial class CompareWindow : Window
         Loaded += async (_, _) => await CompareAsync();
     }
 
+    /// <summary>Text files above this size are compared byte by byte: a line diff would need gigabytes of memory.</summary>
+    public const long MaxTextDiffBytes = 32 * 1024 * 1024;
+
     /// <summary>
-    /// For binary files a line diff is meaningless: returns a message with the first differing byte instead,
-    /// or null when the files are text and the window should be shown.
+    /// For binary (or very large) files a line diff is meaningless or too expensive: returns a message with the
+    /// first differing byte instead, or null when the files are text and the window should be shown.
     /// </summary>
     public static string? BinarySummary(string left, string right)
     {
-        if (!IsBinary(left) && !IsBinary(right)) return null;
+        var tooLarge = new FileInfo(left).Length > MaxTextDiffBytes || new FileInfo(right).Length > MaxTextDiffBytes;
+        if (!tooLarge && !IsBinary(left) && !IsBinary(right)) return null;
         var offset = TextDiff.FirstDifference(left, right);
+        var note = tooLarge && !IsBinary(left) && !IsBinary(right)
+            ? $"\n\n(Files over {SizeFormatter.Human(MaxTextDiffBytes)} are compared byte by byte, not line by line.)"
+            : "";
         return offset is null
-            ? "The files are identical."
-            : $"The files differ, first at byte offset {offset:N0} (0x{offset:X}).\n\n" +
+            ? "The files are identical." + note
+            : $"The files differ, first at byte offset {offset:N0} (0x{offset:X}).{note}\n\n" +
               $"{Path.GetFileName(left)}: {SizeFormatter.Exact(new FileInfo(left).Length)} bytes\n" +
               $"{Path.GetFileName(right)}: {SizeFormatter.Exact(new FileInfo(right).Length)} bytes";
     }

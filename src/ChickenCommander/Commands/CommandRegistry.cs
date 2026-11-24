@@ -62,7 +62,7 @@ public static class CommandRegistry
         new("CopyToClipboard", "Files", "Copy to clipboard", ["Ctrl+C"], "", w => w.Vm.CopyToClipboardCommand.Execute(null)),
         new("CutToClipboard", "Files", "Cut to clipboard", ["Ctrl+X"], "", w => w.Vm.CutToClipboardCommand.Execute(null)),
         new("Paste", "Files", "Paste from clipboard", ["Ctrl+V"], "", w => w.Vm.PasteCommand.Execute(null)),
-        new("ContextMenu", "Files", "Explorer context menu", ["Apps", "Shift+F10"], "", w => w.ShowContextMenuAtCursor()),
+        new("ContextMenu", "Files", "Right-click menu", ["Apps", "Shift+F10"], "", w => w.ShowContextMenuAtCursor()),
         new("ShowOperations", "Files", "File operations window", ["Ctrl+Shift+O"],"", w => w.Vm.ShowOperationsCommand.Execute(null)),
 
         // Marking

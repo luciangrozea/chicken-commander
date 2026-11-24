@@ -19,6 +19,7 @@ public partial class ListerWindow : Window
         InitializeComponent();
         this.files = files;
         index = startIndex;
+        Viewer.MaxImageSide = 8192; // the full viewer shows more detail than the Quick View panel
         Viewer.InfoChanged += () => InfoText.Text = Viewer.Info;
         Loaded += async (_, _) => await ShowFileAsync(ViewerMode.Auto);
     }
@@ -49,16 +50,32 @@ public partial class ListerWindow : Window
 
     private void FindNext_Click(object sender, RoutedEventArgs e) => FindNext();
 
-    private void FindNext()
+    private async void FindNext()
     {
         if (FindBox.Text.Length == 0)
         {
             FindBox.Focus();
             return;
         }
-        if (!Viewer.FindNext(FindBox.Text, MatchCaseBox.IsChecked == true))
-            MessageBox.Show(this, $"\"{FindBox.Text}\" was not found.", "Find", MessageBoxButton.OK, MessageBoxImage.Information);
+        if (Viewer.IsSearching) return; // one search at a time; Esc stops it
+        var text = FindBox.Text;
+        var info = InfoText.Text;
+        InfoText.Text = $"Searching for \"{text}\"…  (Esc to stop)";
+        bool found;
+        try
+        {
+            found = await Viewer.FindNextAsync(text, MatchCaseBox.IsChecked == true);
+        }
+        finally
+        {
+            if (IsLoaded) InfoText.Text = info;
+        }
+        if (!found && !stoppedSearch && IsLoaded)
+            MessageBox.Show(this, $"\"{text}\" was not found.", "Find", MessageBoxButton.OK, MessageBoxImage.Information);
+        stoppedSearch = false;
     }
+
+    private bool stoppedSearch;
 
     private void FindBox_KeyDown(object sender, KeyEventArgs e)
     {
@@ -76,6 +93,11 @@ public partial class ListerWindow : Window
 
         switch (e.Key)
         {
+            case Key.Escape when Viewer.IsSearching:
+                stoppedSearch = true;
+                Viewer.CancelSearch();
+                e.Handled = true;
+                return;
             case Key.Escape when inFindBox:
                 Viewer.FocusContent();
                 e.Handled = true;

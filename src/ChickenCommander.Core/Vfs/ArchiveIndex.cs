@@ -23,7 +23,7 @@ public sealed class ArchiveIndex
     public static ArchiveIndex Load(string archivePath, CancellationToken ct = default)
     {
         var index = new ArchiveIndex(archivePath);
-        foreach (var (entry, _) in ArchiveReading.Entries(archivePath))
+        foreach (var entry in ArchiveReading.List(archivePath, ct))
         {
             ct.ThrowIfCancellationRequested();
             var inner = NormalizeKey(entry.Key);

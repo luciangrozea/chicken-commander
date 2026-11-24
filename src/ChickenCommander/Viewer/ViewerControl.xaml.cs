@@ -26,6 +26,13 @@ public partial class ViewerControl : UserControl
 
     private FileDocument? document;
     private CancellationTokenSource? loading;
+    private CancellationTokenSource? searching;
+
+    /// <summary>
+    /// Images are decoded at most this many pixels wide or high. A 20000 x 15000 photo would otherwise need
+    /// 1.2 GB of memory, and the graphics card cannot draw anything that big anyway.
+    /// </summary>
+    public int MaxImageSide { get; set; } = 4096;
 
     public ViewerControl()
     {
@@ -68,46 +75,53 @@ public partial class ViewerControl : UserControl
         }
 
         ShowMessage("Loading…");
-        FileDocument doc;
+        FileDocument? doc = null;
         try
         {
-            doc = await Task.Run(() => FileDocument.Open(path, cts.Token), cts.Token);
+            // Hex mode needs no line index, so a binary file of any size opens at once.
+            doc = await Task.Run(() => FileDocument.Open(path, indexLines: false, cts.Token), cts.Token);
+            var opened = doc;
+            var hex = mode == ViewerMode.Hex || (mode == ViewerMode.Auto && opened.IsBinary);
+            if (!hex)
+            {
+                if (opened.Length > SmallTextLimit) ShowMessage($"Counting lines… ({SizeFormatter.Human(opened.Length)})");
+                await Task.Run(() => opened.EnsureIndexed(cts.Token), cts.Token);
+            }
+            var smallText = !hex && opened.Length <= SmallTextLimit ? await Task.Run(opened.ReadAllText, cts.Token) : null;
+            if (cts.IsCancellationRequested)
+            {
+                opened.Dispose();
+                return;
+            }
+
+            document = opened;
+            ActualMode = hex ? ViewerMode.Hex : ViewerMode.Text;
+            HideAll();
+            if (smallText is not null)
+            {
+                TextView.Text = smallText;
+                TextView.Visibility = Visibility.Visible;
+                TextView.ScrollToHome();
+            }
+            else
+            {
+                LinesView.ItemsSource = new VirtualLines(opened, hex);
+                LinesView.Visibility = Visibility.Visible;
+            }
+
+            SetInfo(hex
+                ? $"Hex · {SizeFormatter.Exact(opened.Length)} bytes"
+                : $"Text · {TextDetector.Describe(opened.Encoding)} · {opened.LineCount:N0} lines{(opened.IsTruncated ? " (cut off)" : "")} · {SizeFormatter.Human(opened.Length)}");
         }
         catch (OperationCanceledException)
         {
-            return;
+            if (doc != document) doc?.Dispose();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OutOfMemoryException or ObjectDisposedException)
         {
-            ShowMessage($"Cannot open the file:\n{ex.Message}");
-            return;
+            if (doc != document) doc?.Dispose();
+            if (!cts.IsCancellationRequested) ShowMessage($"Cannot open the file:\n{ex.Message}");
         }
-        if (cts.IsCancellationRequested)
-        {
-            doc.Dispose();
-            return;
-        }
-
-        document = doc;
-        var hex = mode == ViewerMode.Hex || (mode == ViewerMode.Auto && doc.IsBinary);
-        ActualMode = hex ? ViewerMode.Hex : ViewerMode.Text;
-        HideAll();
-
-        if (!hex && doc.Length <= SmallTextLimit)
-        {
-            TextView.Text = await Task.Run(doc.ReadAllText, cts.Token);
-            TextView.Visibility = Visibility.Visible;
-            TextView.ScrollToHome();
-        }
-        else
-        {
-            LinesView.ItemsSource = new VirtualLines(doc, hex);
-            LinesView.Visibility = Visibility.Visible;
-        }
-
-        SetInfo(hex
-            ? $"Hex · {SizeFormatter.Exact(doc.Length)} bytes"
-            : $"Text · {TextDetector.Describe(doc.Encoding)} · {doc.LineCount:N0} lines · {SizeFormatter.Human(doc.Length)}");
     }
 
     /// <summary>Shows a short message instead of file content (folders, empty selection, errors).</summary>
@@ -119,8 +133,17 @@ public partial class ViewerControl : UserControl
         SetInfo(string.Empty);
     }
 
-    /// <summary>Selects the next match after the current position (wrapping around). Returns false if not found.</summary>
-    public bool FindNext(string text, bool matchCase)
+    /// <summary>True while a search runs in the background (big files take a while).</summary>
+    public bool IsSearching => searching is not null;
+
+    /// <summary>Stops a running search.</summary>
+    public void CancelSearch() => searching?.Cancel();
+
+    /// <summary>
+    /// Selects the next match after the current position (wrapping around). Returns false if not found or cancelled.
+    /// Big files are searched on a background thread, so the window stays responsive.
+    /// </summary>
+    public async Task<bool> FindNextAsync(string text, bool matchCase)
     {
         if (string.IsNullOrEmpty(text)) return false;
         var comparison = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
@@ -138,33 +161,39 @@ public partial class ViewerControl : UserControl
             return true;
         }
 
-        if (LinesView.Visibility == Visibility.Visible && document is not null && ActualMode == ViewerMode.Text)
+        if (LinesView.Visibility != Visibility.Visible || document is not { } doc) return false;
+        searching?.Cancel();
+        var cts = searching = new CancellationTokenSource();
+        var selected = Math.Max(-1, LinesView.SelectedIndex);
+        try
         {
-            var from = LinesView.SelectedIndex + 1;
-            var line = document.FindLine(text, Math.Max(0, from), matchCase);
-            if (line < 0) return false;
-            var item = LinesView.Items[line];
+            int row;
+            if (ActualMode == ViewerMode.Text)
+            {
+                row = await Task.Run(() => doc.FindLine(text, selected + 1, matchCase, cts.Token), cts.Token);
+            }
+            else
+            {
+                // Hex view: search the raw bytes (the ASCII column), so "MZ" or "PNG" can be found.
+                var start = (selected + 1L) * FileDocument.HexBytesPerLine;
+                var offset = await Task.Run(() => doc.FindBytes(text, start, matchCase, cts.Token), cts.Token);
+                row = offset < 0 || offset / FileDocument.HexBytesPerLine > int.MaxValue ? -1 : (int)(offset / FileDocument.HexBytesPerLine);
+            }
+            if (row < 0 || cts.IsCancellationRequested || document != doc) return false;
+            var item = LinesView.Items[row];
             LinesView.SelectedItem = item;
             LinesView.ScrollIntoView(item);
             return true;
         }
-
-        if (LinesView.Visibility == Visibility.Visible && document is not null && ActualMode == ViewerMode.Hex)
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or IOException)
         {
-            // Hex view: search the ASCII column so "MZ" or "PNG" can be found.
-            var count = LinesView.Items.Count;
-            for (var n = 1; n <= count; n++)
-            {
-                var i = (LinesView.SelectedIndex + n + count) % count;
-                if (((ViewerLine)LinesView.Items[i]!).Text[59..].Contains(text, comparison))
-                {
-                    LinesView.SelectedIndex = i;
-                    LinesView.ScrollIntoView(LinesView.Items[i]);
-                    return true;
-                }
-            }
+            return false;
         }
-        return false;
+        finally
+        {
+            if (searching == cts) searching = null;
+            cts.Dispose();
+        }
     }
 
     /// <summary>Copies the selected text or lines.</summary>
@@ -193,6 +222,7 @@ public partial class ViewerControl : UserControl
     private void Close(bool keepCancellation)
     {
         if (!keepCancellation) loading?.Cancel();
+        searching?.Cancel();
         LinesView.ItemsSource = null;
         TextView.Clear();
         ImageControl.Source = null;
@@ -204,30 +234,62 @@ public partial class ViewerControl : UserControl
     {
         try
         {
-            var image = await Task.Run(() =>
-            {
-                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.CacheOption = BitmapCacheOption.OnLoad; // read fully, then release the file
-                bitmap.StreamSource = stream;
-                bitmap.EndInit();
-                bitmap.Freeze();
-                return bitmap;
-            }, ct);
+            var maxSide = MaxImageSide;
+            var (image, width, height) = await Task.Run(() => DecodeImage(path, maxSide), ct);
             if (ct.IsCancellationRequested) return false;
 
             HideAll();
+            ActualMode = ViewerMode.Image;
+            var size = SizeFormatter.Human(new FileInfo(path).Length);
+            if (image is null)
+            {
+                MessageView.Text = $"This image is too large to display ({width:N0} × {height:N0} pixels).\nThe hex view (2 in the F3 viewer) still works.";
+                MessageView.Visibility = Visibility.Visible;
+                SetInfo($"Image · {width:N0} × {height:N0} px · {size}");
+                return true;
+            }
             ImageControl.Source = image;
             ImageView.Visibility = Visibility.Visible;
-            ActualMode = ViewerMode.Image;
-            SetInfo($"Image · {image.PixelWidth} × {image.PixelHeight} px · {SizeFormatter.Human(new FileInfo(path).Length)}");
+            var scaled = image.PixelWidth < width ? $" (shown at {image.PixelWidth:N0} × {image.PixelHeight:N0})" : "";
+            SetInfo($"Image · {width:N0} × {height:N0} px{scaled} · {size}");
             return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or OperationCanceledException or FileFormatException or InvalidOperationException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or OperationCanceledException
+                                       or FileFormatException or InvalidOperationException or OutOfMemoryException or ArgumentException
+                                       or System.Runtime.InteropServices.COMException or OverflowException)
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Reads the image size first, then decodes it scaled down to at most <paramref name="maxSide"/> pixels per side.
+    /// Returns a null image (with the real size) when the decoder cannot handle it at all.
+    /// </summary>
+    private static (BitmapSource? Image, int Width, int Height) DecodeImage(string path, int maxSide)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation | BitmapCreateOptions.IgnoreColorProfile, BitmapCacheOption.None);
+        var frame = decoder.Frames[0];
+        int width = frame.PixelWidth, height = frame.PixelHeight;
+
+        stream.Position = 0;
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad; // read fully, then release the file
+        bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+        if (width > maxSide || height > maxSide)
+        {
+            // Setting one side keeps the aspect ratio.
+            if (width >= height) bitmap.DecodePixelWidth = maxSide;
+            else bitmap.DecodePixelHeight = maxSide;
+        }
+        bitmap.StreamSource = stream;
+        bitmap.EndInit();
+        bitmap.Freeze();
+        // WIC gives up on some gigantic images and returns an empty 1 x 1 picture instead of failing.
+        if (bitmap.PixelWidth <= 1 && bitmap.PixelHeight <= 1 && width * (long)height > 1) return (null, width, height);
+        return (bitmap, width, height);
     }
 
     private void HideAll()

@@ -192,10 +192,16 @@ public partial class FilePanel : UserControl
     private FileItemViewModel? anchor;
 
     /// <summary>
-    /// Raised on right-click (or the menu key) with a point relative to this panel and the item under it
-    /// (null on empty space): the main window shows the Explorer menu for the selection.
+    /// Raised on right-click (or the menu key) with a point relative to this panel, the item under it
+    /// (null on empty space) and whether the full Explorer menu was asked for directly (Shift+right-click).
     /// </summary>
-    public event Action<FilePanel, Point, FileItemViewModel?>? ContextMenuRequested;
+    public event Action<FilePanel, Point, FileItemViewModel?, bool>? ContextMenuRequested;
+
+    private void CancelBusy_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel?.CancelBusy();
+        FocusList();
+    }
 
     private FileItemViewModel? ItemAt(object originalSource) =>
         originalSource is DependencyObject d && FindParent<DataGridRow>(d) is { Item: FileItemViewModel item } ? item : null;
@@ -432,7 +438,8 @@ public partial class FilePanel : UserControl
     {
         e.Handled = true;
         var item = ItemAt(e.OriginalSource);
-        ContextMenuRequested?.Invoke(this, e.GetPosition(this), item);
+        // Shift+right-click opens the full Explorer menu directly, as on Windows 11.
+        ContextMenuRequested?.Invoke(this, e.GetPosition(this), item, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
     }
 
     /// <summary>Menu key / Shift+F10: the menu opens next to the cursor row.</summary>
@@ -443,7 +450,7 @@ public partial class FilePanel : UserControl
         var point = new Point(40, 40);
         if (item is not null && Grid.ItemContainerGenerator.ContainerFromItem(item) is DataGridRow row)
             point = row.TranslatePoint(new Point(40, row.ActualHeight), this);
-        ContextMenuRequested?.Invoke(this, point, item);
+        ContextMenuRequested?.Invoke(this, point, item, false);
     }
 
     private void Grid_PreviewKeyDown(object sender, KeyEventArgs e)

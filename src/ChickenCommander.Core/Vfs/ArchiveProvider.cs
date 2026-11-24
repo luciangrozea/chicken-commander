@@ -44,6 +44,21 @@ public sealed class ArchiveProvider : IFileSystemProvider
 
     public bool CanHandle(string path) => TrySplit(path, out _, out _);
 
+    /// <summary>True when the archive's listing is already in memory and up to date, so browsing it is instant.</summary>
+    public bool IsCached(string archivePath)
+    {
+        if (!cache.TryGetValue(archivePath, out var cached)) return false;
+        try
+        {
+            var info = new FileInfo(archivePath);
+            return cached.Stamp == info.LastWriteTimeUtc && cached.Length == info.Length;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     public ArchiveIndex GetIndex(string archivePath, CancellationToken ct = default)
     {
         var info = new FileInfo(archivePath);

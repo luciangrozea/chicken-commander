@@ -73,7 +73,9 @@ public partial class FilePanelViewModel : ObservableObject
     {
         Tabs.Clear();
         // Server tabs are not restored (the connection is closed); archive tabs are, if the archive still exists.
-        foreach (var path in settings.Tabs.Where(t => !t.Contains("://", StringComparison.Ordinal) && vfs.DirectoryExists(t)))
+        // (Only the archive file is checked here: reading a big archive's listing would delay the start.)
+        foreach (var path in settings.Tabs.Where(t => !t.Contains("://", StringComparison.Ordinal)
+                                                      && (ArchiveProvider.TrySplit(t, out _, out _) || vfs.DirectoryExists(t))))
             Tabs.Add(new PanelTab(path));
         if (Tabs.Count == 0) Tabs.Add(new PanelTab(fallback));
         var active = Tabs[Math.Clamp(settings.ActiveTab, 0, Tabs.Count - 1)];
@@ -94,6 +96,17 @@ public partial class FilePanelViewModel : ObservableObject
     /// <summary>Loads <paramref name="path"/> and puts the cursor on <paramref name="selectName"/> if present.</summary>
     public bool Navigate(string path, string? selectName = null, IReadOnlySet<string>? keepMarked = null, bool recordHistory = true)
     {
+        // Going somewhere else drops an archive that is still being read.
+        busy?.Cancel();
+
+        // The first visit to an archive reads its whole listing, which takes seconds (or minutes) for big
+        // .7z / .tar.gz files: do that in the background and show the archive when it is ready.
+        if (ArchiveProvider.TrySplit(path, out var archivePath, out _) && !vfs.Archives.IsCached(archivePath))
+        {
+            _ = NavigateWhenIndexedAsync(archivePath, path, selectName, keepMarked, recordHistory);
+            return true;
+        }
+
         IReadOnlyList<FileEntry> entries;
         string full;
         try
@@ -156,6 +169,67 @@ public partial class FilePanelViewModel : ObservableObject
         UpdateStatus();
         FocusRequested?.Invoke(CurrentItem);
         return true;
+    }
+
+    // ---- Background work (reading big archives) -------------------------------------------------
+
+    /// <summary>What the panel is busy with ("Reading archive…"), or null. The view shows it over the list.</summary>
+    [ObservableProperty] private string? busyText;
+
+    private CancellationTokenSource? busy;
+
+    public bool IsBusy => BusyText is not null;
+
+    /// <summary>Stops reading an archive (Esc or the Cancel button); the panel stays where it was.</summary>
+    public void CancelBusy() => busy?.Cancel();
+
+    private async Task NavigateWhenIndexedAsync(string archivePath, string path, string? selectName,
+        IReadOnlySet<string>? keepMarked, bool recordHistory)
+    {
+        var cts = busy = new CancellationTokenSource();
+        var size = new FileInfo(archivePath).Length;
+        BusyText = $"Reading {Path.GetFileName(archivePath)} ({SizeFormatter.Human(size)})…\nPress Esc to cancel.";
+        string? error = null;
+        try
+        {
+            await Task.Run(() => vfs.Archives.GetIndex(archivePath, cts.Token), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            // Broken or unsupported archive, password-protected headers, disk errors, not enough memory…
+            error = ex.Message;
+        }
+        finally
+        {
+            if (busy == cts)
+            {
+                busy = null;
+                BusyText = null;
+            }
+            cts.Dispose();
+        }
+        if (cts.IsCancellationRequested && error is null)
+        {
+            StartupFallback(archivePath);
+            FocusRequested?.Invoke(CurrentItem);
+            return;
+        }
+        if (error is not null)
+        {
+            ErrorOccurred?.Invoke(error);
+            StartupFallback(archivePath);
+            return;
+        }
+        if (!Navigate(path, selectName, keepMarked, recordHistory)) StartupFallback(archivePath);
+    }
+
+    /// <summary>When an archive tab restored at start cannot be shown, the panel shows the archive's folder instead of nothing.</summary>
+    private void StartupFallback(string archivePath)
+    {
+        if (CurrentPath.Length == 0 && Path.GetDirectoryName(archivePath) is { } folder) Navigate(folder, Path.GetFileName(archivePath));
     }
 
     /// <summary>Reloads the current directory, keeping the cursor and marks where possible.</summary>

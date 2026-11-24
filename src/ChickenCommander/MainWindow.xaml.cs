@@ -305,7 +305,13 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
         // A drop-down or menu that has the keyboard (drive list, hotlist, history) handles its own keys:
         // Enter picks the entry there instead of opening the item under the panel cursor.
         if (IsPopupControlFocused) return;
-        e.Handled = (!IsTextBoxFocused && HandleContextKey(key, mods)) || RunShortcut(key, mods);
+        if (key == Key.Escape && vm.ActivePanel.IsBusy)
+        {
+            vm.ActivePanel.CancelBusy(); // stop reading a big archive
+            e.Handled = true;
+            return;
+        }
+        e.Handled =(!IsTextBoxFocused && HandleContextKey(key, mods)) || RunShortcut(key, mods);
     }
 
     private static bool IsPopupControlFocused =>
@@ -361,10 +367,11 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
     internal void ShowContextMenuAtCursor() => ActivePanelView.RequestContextMenuAtCursor();
 
     /// <summary>
-    /// Right-click on files: the Explorer menu for the selection (local drives), a short menu of our own
-    /// inside archives and on servers, and a folder menu (Paste, New folder…) on empty space or "..".
+    /// Right-click on files: our own menu, which opens instantly and loads no third-party code (Open, Cut, Copy,
+    /// Rename, Delete, Properties…), with "Show more options" for the full Explorer menu, as on Windows 11.
+    /// Shift+right-click opens the Explorer menu directly. Empty space or "..": a folder menu (Paste, New folder…).
     /// </summary>
-    private void OnContextMenuRequested(FilePanel view, Point point, FileItemViewModel? item)
+    private void OnContextMenuRequested(FilePanel view, Point point, FileItemViewModel? item, bool explorerMenu)
     {
         if (view.ViewModel is not { } panel) return;
         vm.ActivePanel = panel;
@@ -380,27 +387,142 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
             ShowPopupMenu(view, point, VirtualItemMenuEntries(panel));
             return;
         }
-
-        var screen = view.PointToScreen(point);
-        var handledByApp = false;
-        var shown = ShellContextMenu.Show(this, selection.Select(i => i.Entry.FullPath).ToList(), screen, verb =>
+        if (explorerMenu)
         {
-            handledByApp = HandleShellVerb(verb, panel, selection);
-            return handledByApp;
-        });
-        if (!shown)
-        {
-            ShowPopupMenu(view, point, FallbackItemMenuEntries(panel, selection));
+            ShowExplorerMenu(view, point, panel, selection, extended: true);
             return;
         }
-        // A shell command (7-Zip, "Send to", Properties…) may have changed files: reload, keeping marks and cursor.
-        if (!handledByApp) Dispatcher.BeginInvoke(() =>
+        ShowPopupMenu(view, point, ItemMenuEntries(view, point, panel, selection));
+    }
+
+    private bool explorerMenuStarting;
+
+    /// <summary>
+    /// The full Explorer menu, shown by a helper process (see <see cref="ShellHelperProcess"/>): shell extensions run
+    /// there, so one that crashes or hangs cannot take Chicken Commander down with it.
+    /// </summary>
+    private async void ShowExplorerMenu(FilePanel view, Point point, FilePanelViewModel panel, IReadOnlyList<FileItemViewModel> selection, bool extended)
+    {
+        if (explorerMenuStarting) return;
+        explorerMenuStarting = true;
+        var paths = selection.Select(i => i.Entry.FullPath).ToList();
+        var screen = view.PointToScreen(point);
+        Mouse.OverrideCursor = Cursors.AppStarting;
+        void Shown()
+        {
+            Mouse.OverrideCursor = null;
+            explorerMenuStarting = false;
+        }
+        try
+        {
+            var (outcome, detail) = await ShellHelperProcess.ShowMenuAsync(new WindowInteropHelper(this).Handle, paths, screen, extended,
+                onVerb: verb =>
+                {
+                    Activate();
+                    HandleShellVerb(verb, panel, selection);
+                },
+                onShellCommand: () => RefreshAfterShellCommand(panel),
+                onShown: Shown);
+            switch (outcome)
+            {
+                case ShellHelperProcess.Outcome.Crashed:
+                    App.LogError("Explorer menu helper crashed", detail);
+                    ShowError("Explorer menu",
+                        "The Explorer menu could not be shown: a program that adds itself to that menu (a shell extension) " +
+                        $"crashed ({detail}).\n\nChicken Commander is not affected. Its own right-click menu still works.");
+                    break;
+                case ShellHelperProcess.Outcome.TimedOut:
+                    App.LogError("Explorer menu helper timed out", detail);
+                    ShowError("Explorer menu", detail + "\n\nA program that adds itself to that menu (a shell extension) seems stuck. Its own right-click menu still works.");
+                    break;
+                case ShellHelperProcess.Outcome.NoMenu:
+                    ShowPopupMenu(view, point, ItemMenuEntries(view, point, panel, selection, withMoreOptions: false));
+                    break;
+                case ShellHelperProcess.Outcome.NotStarted:
+                    ShowError("Explorer menu", detail);
+                    break;
+            }
+        }
+        finally
+        {
+            Shown();
+        }
+    }
+
+    /// <summary>A shell command (7-Zip, "Send to", Properties…) may have changed files: reload, keeping marks and cursor.</summary>
+    private void RefreshAfterShellCommand(FilePanelViewModel panel)
+    {
+        Dispatcher.BeginInvoke(() =>
         {
             panel.Refresh();
             if (!ReferenceEquals(panel, vm.InactivePanel) && string.Equals(vm.InactivePanel.CurrentPath, panel.CurrentPath, StringComparison.OrdinalIgnoreCase))
                 vm.InactivePanel.Refresh();
         }, System.Windows.Threading.DispatcherPriority.Background);
-        view.FocusList();
+    }
+
+    /// <summary>Properties / Open with run in the helper process too: they load the same shell extensions.</summary>
+    private async void RunShellVerb(IReadOnlyList<string> paths, string verb, FilePanelViewModel panel)
+    {
+        var (outcome, detail) = await ShellHelperProcess.InvokeAsync(paths, verb, () => RefreshAfterShellCommand(panel));
+        if (outcome == ShellHelperProcess.Outcome.Crashed)
+        {
+            App.LogError($"Shell verb '{verb}' helper crashed", detail);
+            ShowError(verb == "properties" ? "Properties" : "Open with",
+                $"Windows could not show this dialog: a shell extension installed on this PC crashed ({detail}).\n\nChicken Commander is not affected.");
+        }
+        else if (outcome == ShellHelperProcess.Outcome.NotStarted)
+        {
+            ShowError(verb == "properties" ? "Properties" : "Open with", detail);
+        }
+    }
+
+    /// <summary>Our own menu for files and folders on local and network drives.</summary>
+    private List<MenuEntry> ItemMenuEntries(FilePanel view, Point point, FilePanelViewModel panel, IReadOnlyList<FileItemViewModel> selection,
+        bool withMoreOptions = true)
+    {
+        var paths = selection.Select(i => i.Entry.FullPath).ToList();
+        var singleFolder = selection is [{ Entry.IsDirectory: true } folder] ? folder : null;
+        var entries = new List<MenuEntry>
+        {
+            new("_Open", () => vm.OpenCurrent(), "Enter"),
+        };
+        if (selection is [{ Entry.IsDirectory: false } file])
+            entries.Add(new MenuEntry("Open _with...", () => RunShellVerb([file.Entry.FullPath], "openas", panel)));
+        entries.Add(new MenuEntry("_View", () => vm.ViewCommand.Execute(null), Gesture("View")));
+        entries.Add(MenuEntry.Separator);
+        entries.Add(new MenuEntry("Cu_t", () => vm.PutOnClipboard(cut: true), Gesture("CutToClipboard")));
+        entries.Add(new MenuEntry("_Copy", () => vm.PutOnClipboard(cut: false), Gesture("CopyToClipboard")));
+        if (FileClipboard.ContainsFiles())
+            entries.Add(new MenuEntry("_Paste", () => vm.PasteInto(singleFolder?.Entry.FullPath ?? panel.CurrentPath), Gesture("Paste")));
+        entries.Add(new MenuEntry("Copy as pat_h", () => CopyAsPath(paths)));
+        entries.Add(MenuEntry.Separator);
+        entries.Add(new MenuEntry("Rena_me...", () =>
+        {
+            if (selection.Count > 1) vm.MultiRenameCommand.Execute(null);
+            else vm.RenameCommand.Execute(null);
+        }, Gesture(selection.Count > 1 ? "MultiRename" : "Rename")));
+        entries.Add(new MenuEntry("_Delete", () => vm.DeleteCommand.Execute(null), Gesture("Delete")));
+        entries.Add(MenuEntry.Separator);
+        entries.Add(new MenuEntry("P_ack...", () => vm.PackCommand.Execute(null), Gesture("Pack")));
+        entries.Add(new MenuEntry("P_roperties", () => RunShellVerb(paths, "properties", panel)));
+        if (withMoreOptions)
+        {
+            entries.Add(MenuEntry.Separator);
+            entries.Add(new MenuEntry("_Show more options", () => ShowExplorerMenu(view, point, panel, selection, extended: false), "Shift+right-click"));
+        }
+        return entries;
+    }
+
+    private void CopyAsPath(IReadOnlyList<string> paths)
+    {
+        try
+        {
+            Clipboard.SetText(string.Join(Environment.NewLine, paths.Select(p => $"\"{p}\"")));
+        }
+        catch (System.Runtime.InteropServices.ExternalException ex)
+        {
+            ShowError("Copy as path", ex.Message); // another program holds the clipboard
+        }
     }
 
     /// <summary>Explorer verbs the app runs itself, so marks, refresh and confirmations behave like the F-keys.</summary>
@@ -449,7 +571,7 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
             entries.Add(new MenuEntry("Open in _Explorer", () => StartInWorkingDirectory("explorer.exe", ".")));
             entries.Add(new MenuEntry("_Command prompt here", () => StartInWorkingDirectory("cmd.exe", null)));
             entries.Add(MenuEntry.Separator);
-            entries.Add(new MenuEntry("Pr_operties", () => ShellContextMenu.ShowProperties(this, panel.CurrentPath)));
+            entries.Add(new MenuEntry("Pr_operties", () => RunShellVerb([panel.CurrentPath], "properties", panel)));
         }
         return entries;
     }
@@ -469,28 +591,32 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
         return entries;
     }
 
-    /// <summary>Used only when Windows cannot build its own menu for the selection.</summary>
-    private List<MenuEntry> FallbackItemMenuEntries(FilePanelViewModel panel, IReadOnlyList<FileItemViewModel> selection) =>
-    [
-        new("_Open", () => vm.OpenCurrent(), "Enter"),
-        MenuEntry.Separator,
-        new("Cu_t", () => vm.PutOnClipboard(cut: true), Gesture("CutToClipboard")),
-        new("_Copy", () => vm.PutOnClipboard(cut: false), Gesture("CopyToClipboard")),
-        new("_Paste", () => vm.PasteInto(selection is [{ Entry.IsDirectory: true } f] ? f.Entry.FullPath : panel.CurrentPath), Gesture("Paste")),
-        MenuEntry.Separator,
-        new("Rena_me...", () => vm.RenameCommand.Execute(null), Gesture("Rename")),
-        new("_Delete", () => vm.DeleteCommand.Execute(null), Gesture("Delete")),
-        MenuEntry.Separator,
-        new("P_roperties", () => ShellContextMenu.ShowProperties(this, selection[0].Entry.FullPath)),
-    ];
-
     private string? Gesture(string commandId) =>
         shortcuts.GesturesFor(commandId) is { Count: > 0 } g ? KeyNames.Display(g[0]) : null;
 
     private void ShowPopupMenu(FilePanel view, Point point, IReadOnlyList<MenuEntry> entries)
     {
-        // A zero-size rectangle at the click point: the menu opens right there (below and to the right of it).
-        var menu = new ContextMenu { PlacementTarget = view, Placement = PlacementMode.Bottom, PlacementRectangle = new Rect(point, new Size(0, 0)) };
+        // Opens with its top-left corner at the click point, like Explorer's menus. (Placement "Bottom" would follow the
+        // tablet "handedness" setting and open to the left of the pointer on many laptops.) WPF still flips it at screen edges.
+        var menu = new ContextMenu
+        {
+            PlacementTarget = view,
+            Placement = PlacementMode.Custom,
+            // Custom placement works in device pixels relative to the target; WPF still moves it to stay on screen.
+            // Like Windows menus: below-right of the pointer, or flipped left / up when that does not fit on the screen.
+            CustomPopupPlacementCallback = (size, _, _) =>
+            {
+                var dpi = VisualTreeHelper.GetDpi(view);
+                var p = new Point(point.X * dpi.DpiScaleX, point.Y * dpi.DpiScaleY);
+                return
+                [
+                    new CustomPopupPlacement(p, PopupPrimaryAxis.None),
+                    new CustomPopupPlacement(new Point(p.X - size.Width, p.Y), PopupPrimaryAxis.None),
+                    new CustomPopupPlacement(new Point(p.X, p.Y - size.Height), PopupPrimaryAxis.None),
+                    new CustomPopupPlacement(new Point(p.X - size.Width, p.Y - size.Height), PopupPrimaryAxis.None),
+                ];
+            },
+        };
         foreach (var entry in entries)
         {
             if (entry.Action is null)
@@ -809,17 +935,23 @@ public partial class MainWindow : Window, IDialogService, IRemoteTrust
         searchWindow.Show();
     }
 
-    public void ShowCompare(string left, string right)
+    public async void ShowCompare(string left, string right)
     {
         string? binary;
+        // Comparing two big files byte by byte takes a while: do it off the UI thread.
+        Mouse.OverrideCursor = Cursors.AppStarting;
         try
         {
-            binary = CompareWindow.BinarySummary(left, right);
+            binary = await Task.Run(() => CompareWindow.BinarySummary(left, right));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             ShowError("Compare by content", ex.Message);
             return;
+        }
+        finally
+        {
+            Mouse.OverrideCursor = null;
         }
         if (binary is not null)
         {

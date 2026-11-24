@@ -8,47 +8,26 @@ namespace ChickenCommander.Services;
 /// The real Windows Explorer right-click menu (the classic one, "Show more options" on Windows 11) for files and
 /// folders: Open with, Send to, Properties and every shell extension the user has installed (7-Zip, antivirus…).
 /// Verbs the app does itself (copy, cut, paste, rename, delete) are handed back so the panels stay in sync.
+/// <para>
+/// Shell extensions are third-party native code loaded into the calling process; a broken one can crash it.
+/// So this class is only used inside the separate helper process (<see cref="ShellHelperProcess"/>), never in
+/// the main window's process.
+/// </para>
 /// </summary>
 public static class ShellContextMenu
 {
     /// <summary>Shows the menu for <paramref name="paths"/> (all in one folder) at a screen point.</summary>
+    /// <param name="source">The (hidden) window that owns the menu and receives its messages.</param>
     /// <param name="handleVerb">Called with the canonical verb ("copy", "rename"…) before the shell runs it;
-    /// return true when the app handled it.</param>
-    /// <returns>false when the shell could not build a menu (the caller can fall back to its own).</returns>
-    public static bool Show(Window owner, IReadOnlyList<string> paths, Point screenPoint, Func<string, bool> handleVerb)
-    {
-        if (paths.Count == 0) return false;
-        var hwnd = new WindowInteropHelper(owner).Handle;
-        var pidls = new List<IntPtr>();
-        IntPtr parentPtr = IntPtr.Zero, menuPtr = IntPtr.Zero, hmenu = IntPtr.Zero;
-        HwndSource? source = null;
-        HwndSourceHook? hook = null;
-        object? contextMenu = null;
-        try
+    /// return true when the app handles it.</param>
+    /// <param name="extended">Shift was held: show the extended verbs too ("Copy as path", "Open PowerShell here"…).</param>
+    /// <returns>false when the shell could not build a menu.</returns>
+    public static bool Show(HwndSource source, IReadOnlyList<string> paths, Point screenPoint, Func<string, bool> handleVerb,
+        bool extended = false, Action? showing = null) =>
+        WithMenu(source.Handle, paths, extended ? CmfExtendedVerbs : 0, (menu, contextMenu, hmenu) =>
         {
-            foreach (var path in paths)
-            {
-                if (SHParseDisplayName(path, IntPtr.Zero, out var pidl, 0, out _) != 0 || pidl == IntPtr.Zero) return false;
-                pidls.Add(pidl);
-            }
-            var shellFolderId = typeof(IShellFolder).GUID;
-            if (SHBindToParent(pidls[0], ref shellFolderId, out parentPtr, out _) != 0) return false;
-            var parent = (IShellFolder)Marshal.GetObjectForIUnknown(parentPtr);
-            var children = pidls.Select(ILFindLastID).ToArray();
-            var contextMenuId = typeof(IContextMenu).GUID;
-            if (parent.GetUIObjectOf(hwnd, (uint)children.Length, children, ref contextMenuId, IntPtr.Zero, out menuPtr) != 0 || menuPtr == IntPtr.Zero)
-                return false;
-            contextMenu = Marshal.GetObjectForIUnknown(menuPtr);
-            var menu = (IContextMenu)contextMenu;
-
-            hmenu = CreatePopupMenu();
-            var flags = CmfNormal | CmfExplore | CmfCanRename;
-            if ((System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) != 0) flags |= CmfExtendedVerbs;
-            if (menu.QueryContextMenu(hmenu, 0, FirstCommand, LastCommand, flags) < 0) return false;
-
             // "Send to", "Open with" and icons are filled in on demand through these messages.
-            source = HwndSource.FromHwnd(hwnd);
-            hook = (IntPtr _, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+            HwndSourceHook hook = (IntPtr _, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
             {
                 if (msg is WmInitMenuPopup or WmDrawItem or WmMeasureItem or WmMenuChar)
                 {
@@ -65,9 +44,20 @@ public static class ShellContextMenu
                 }
                 return IntPtr.Zero;
             };
-            source?.AddHook(hook);
-
-            var command = TrackPopupMenuEx(hmenu, TpmReturnCmd | TpmRightButton, (int)screenPoint.X, (int)screenPoint.Y, hwnd, IntPtr.Zero);
+            source.AddHook(hook);
+            int command;
+            try
+            {
+                showing?.Invoke();
+                // Without this the menu would not close when the user clicks elsewhere (the owner is a hidden window).
+                SetForegroundWindow(source.Handle);
+                command = TrackPopupMenuEx(hmenu, TpmReturnCmd | TpmRightButton, (int)screenPoint.X, (int)screenPoint.Y, source.Handle, IntPtr.Zero);
+                PostMessage(source.Handle, 0, IntPtr.Zero, IntPtr.Zero); // WM_NULL: lets the menu loop finish cleanly
+            }
+            finally
+            {
+                source.RemoveHook(hook);
+            }
             if (command < FirstCommand) return true; // closed without a choice
 
             var offset = (uint)(command - FirstCommand);
@@ -78,7 +68,7 @@ public static class ShellContextMenu
             {
                 cbSize = Marshal.SizeOf<CMINVOKECOMMANDINFOEX>(),
                 fMask = CmicMaskUnicode | CmicMaskPtInvoke,
-                hwnd = hwnd,
+                hwnd = source.Handle,
                 lpVerb = (IntPtr)offset,
                 lpVerbW = (IntPtr)offset,
                 lpDirectoryW = Path.GetDirectoryName(paths[0]),
@@ -87,35 +77,77 @@ public static class ShellContextMenu
             };
             menu.InvokeCommand(ref info);
             return true;
+        });
+
+    /// <summary>Runs one verb ("properties", "openas"…) on <paramref name="paths"/> as the Explorer menu would.</summary>
+    public static bool Invoke(IntPtr hwnd, IReadOnlyList<string> paths, string verb) =>
+        WithMenu(hwnd, paths, 0, (menu, _, _) =>
+        {
+            var ansi = Marshal.StringToHGlobalAnsi(verb);
+            var unicode = Marshal.StringToHGlobalUni(verb);
+            try
+            {
+                var info = new CMINVOKECOMMANDINFOEX
+                {
+                    cbSize = Marshal.SizeOf<CMINVOKECOMMANDINFOEX>(),
+                    fMask = CmicMaskUnicode,
+                    hwnd = hwnd,
+                    lpVerb = ansi,
+                    lpVerbW = unicode,
+                    lpDirectoryW = Path.GetDirectoryName(paths[0]),
+                    nShow = SwShowNormal,
+                };
+                return menu.InvokeCommand(ref info) >= 0;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ansi);
+                Marshal.FreeHGlobal(unicode);
+            }
+        });
+
+    /// <summary>Builds the shell's IContextMenu (and its HMENU) for the items, runs <paramref name="use"/>, then frees everything.</summary>
+    private static bool WithMenu(IntPtr hwnd, IReadOnlyList<string> paths, uint extraFlags, Func<IContextMenu, object, IntPtr, bool> use)
+    {
+        if (paths.Count == 0) return false;
+        var pidls = new List<IntPtr>();
+        IntPtr parentPtr = IntPtr.Zero, menuPtr = IntPtr.Zero, hmenu = IntPtr.Zero;
+        object? parent = null, contextMenu = null;
+        try
+        {
+            foreach (var path in paths)
+            {
+                if (SHParseDisplayName(path, IntPtr.Zero, out var pidl, 0, out _) != 0 || pidl == IntPtr.Zero) return false;
+                pidls.Add(pidl);
+            }
+            var shellFolderId = typeof(IShellFolder).GUID;
+            if (SHBindToParent(pidls[0], ref shellFolderId, out parentPtr, out _) != 0 || parentPtr == IntPtr.Zero) return false;
+            parent = Marshal.GetObjectForIUnknown(parentPtr);
+            var children = pidls.Select(ILFindLastID).ToArray();
+            var contextMenuId = typeof(IContextMenu).GUID;
+            if (((IShellFolder)parent).GetUIObjectOf(hwnd, (uint)children.Length, children, ref contextMenuId, IntPtr.Zero, out menuPtr) != 0 || menuPtr == IntPtr.Zero)
+                return false;
+            contextMenu = Marshal.GetObjectForIUnknown(menuPtr);
+            var menu = (IContextMenu)contextMenu;
+
+            hmenu = CreatePopupMenu();
+            if (menu.QueryContextMenu(hmenu, 0, FirstCommand, LastCommand, CmfNormal | CmfExplore | CmfCanRename | extraFlags) < 0) return false;
+            return use(menu, contextMenu, hmenu);
         }
-        catch (Exception ex) when (ex is COMException or InvalidCastException or ArgumentException)
+        catch (Exception ex) when (ex is COMException or InvalidCastException or ArgumentException or NotSupportedException
+                                       or InvalidOperationException or NotImplementedException)
         {
             return false;
         }
         finally
         {
-            if (hook is not null) source?.RemoveHook(hook);
             if (hmenu != IntPtr.Zero) DestroyMenu(hmenu);
             if (contextMenu is not null) Marshal.ReleaseComObject(contextMenu);
+            if (parent is not null) Marshal.ReleaseComObject(parent);
             if (menuPtr != IntPtr.Zero) Marshal.Release(menuPtr);
             if (parentPtr != IntPtr.Zero) Marshal.Release(parentPtr);
             foreach (var pidl in pidls) ILFree(pidl);
         }
-    }
-
-    /// <summary>Opens the Windows Properties dialog of a file or folder.</summary>
-    public static void ShowProperties(Window owner, string path)
-    {
-        var info = new SHELLEXECUTEINFO
-        {
-            cbSize = Marshal.SizeOf<SHELLEXECUTEINFO>(),
-            fMask = SeeMaskInvokeIdList,
-            hwnd = new WindowInteropHelper(owner).Handle,
-            lpVerb = "properties",
-            lpFile = path,
-            nShow = SwShowNormal,
-        };
-        ShellExecuteEx(ref info);
     }
 
     private static string? GetVerb(IContextMenu menu, uint offset)
@@ -248,6 +280,12 @@ public static class ShellContextMenu
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO info);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll")]
     private static extern IntPtr CreatePopupMenu();

@@ -10,7 +10,9 @@
     <RootNamespace>ChickenCommander</RootNamespace>
     <ApplicationIcon>Assets\chicken.ico</ApplicationIcon>
     <Product>Chicken Commander</Product>
-    <Version>1.3.0</Version>
+    <Version>1.3.1</Version>
+    <!-- Program.Main decides between the app and the shell-menu helper process -->
+    <StartupObject>ChickenCommander.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>

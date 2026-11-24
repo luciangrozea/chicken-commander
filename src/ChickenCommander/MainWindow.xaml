@@ -21,7 +21,7 @@
                 <MenuItem Header="Cut to clip_board" Tag="CutToClipboard" Click="Command_Click" />
                 <MenuItem Header="Copy to c_lipboard" Tag="CopyToClipboard" Click="Command_Click" />
                 <MenuItem Header="Pa_ste" Tag="Paste" Click="Command_Click" />
-                <MenuItem Header="Explorer context menu" Tag="ContextMenu" Click="Command_Click" />
+                <MenuItem Header="Right-click menu" Tag="ContextMenu" Click="Command_Click" />
                 <Separator />
                 <MenuItem Header="_Copy..." Tag="Copy" Click="Command_Click" />
                 <MenuItem Header="_Rename/Move..." Tag="Move" Click="Command_Click" />

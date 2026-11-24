@@ -60,14 +60,14 @@ Settings are stored in `%AppData%\ChickenCommander\settings.json` and kept when 
 - Delete to Recycle Bin or permanently, new folder, rename in place
 
 **Tools**
-- **Built-in viewer** (`F3`): text with encoding detection (UTF-8/16/32, BOM, Latin-1), hex, and images; opens multi-GB files instantly by reading only the visible lines; find, word wrap, next/previous file
+- **Built-in viewer** (`F3`): text with encoding detection (UTF-8/16/32, BOM, Latin-1), hex, and images; opens multi-GB files by reading only the visible lines, with a compact line index (a 1.5 GB log needs about 250 MB); huge images are scaled down while decoding; find runs in the background (`Esc` stops it); word wrap, next/previous file
 - **Quick View panel** (`Ctrl+Q`): the other panel previews whatever is under the cursor
 - **Find files** (`Alt+F7`): name masks, containing text (with line preview), size and date filters, subfolders, hidden files; results stream in while searching
 - **Compare by content**: side-by-side line diff (Myers algorithm) with ignore case / whitespace and jump between differences; binary files report the first differing byte
 - **Synchronize directories**: compare two trees by date, size or content, review and change each action (→ / ← / skip), then copy
 
 **Archives & network**
-- **Archives as folders**: press `Enter` on a ZIP, 7z, RAR, TAR, TAR.GZ / TGZ, BZ2 or XZ file to browse it; `F5` extracts the selection, `F3` views a file inside; `..` goes back out
+- **Archives as folders**: press `Enter` on a ZIP, 7z, RAR, TAR, TAR.GZ / TGZ, BZ2 or XZ file to browse it; `F5` extracts the selection, `F3` views a file inside; `..` goes back out. Big archives are read in the background the first time (`Esc` cancels), so the window never freezes
 - **Pack** (`Alt+F5`) into ZIP, TAR or TAR.GZ and **unpack** (`Alt+F9`) whole archives, both in the background queue; protected against “zip slip” paths
 - **FTP, FTPS and SFTP client** (`Ctrl+N`): saved connections, password or private-key login, browse servers in a panel, `F5` / `F6` to download or upload (folders too), `F7` / `F8` / `Shift+F6` on the server
 - Secure by default: SSH host keys are confirmed on first use and checked afterwards; untrusted TLS certificates need an explicit OK; saved passwords are encrypted with Windows DPAPI
@@ -83,7 +83,8 @@ Settings are stored in `%AppData%\ChickenCommander\settings.json` and kept when 
 - Explorer-style selection: `Ctrl`+click adds or removes a file, `Shift`+click selects a range, `Ctrl+Shift`+click adds a range, `Shift`+arrows / `PgUp` / `PgDn` / `Home` / `End` from the keyboard
 - **Drag to select**: hold the left mouse button and draw a rectangle over files and folders (with `Ctrl` to add to the selection); the list scrolls when you reach its edge
 - **Clipboard**: `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste files, and work together with Windows Explorer both ways
-- **Right-click menu from Windows Explorer** on files and folders: Open with, Send to, Properties and all installed extensions (7-Zip, antivirus…); Cut, Copy, Paste, Rename and Delete run through Chicken Commander. Right-click on empty space for Paste, New folder and folder Properties; menu key or `Shift+F10` from the keyboard
+- **Right-click menu** on files and folders, opening instantly: Open, Open with, View, Cut, Copy, Paste, Copy as path, Rename, Delete, Pack and Properties. **Show more options** (or `Shift`+right-click) opens the full Windows Explorer menu with Send to and every installed extension (7-Zip, antivirus…), as on Windows 11. Right-click on empty space for Paste, New folder and folder Properties; menu key or `Shift+F10` from the keyboard
+- The Explorer menu, Properties and Open with run in a separate helper process: a broken shell extension installed on the PC cannot crash or freeze Chicken Commander (you get a message instead)
 
 **Marking & command line**
 - Insert / Space, mark by mask (`*.txt;*.md | *.bak`), invert, select all
